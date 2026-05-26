@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ocean Acidification Prototype</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div id="container">
+        <h1>The Widening Gap: Ocean pH vs. Marine Viability</h1>
+        <p class="subtitle">Hover over the timeline to see historical pH levels, and click the button to visualize the growing deficit against the optimal marine baseline.</p>
+        
+        <div class="controls">
+            <button id="toggleBaseline">Show Acidification Deficit</button>
+        </div>
+
+        <div id="visualization"></div>
+        <div id="tooltip" class="tooltip" style="opacity:0;"></div>
+
+        <div id="writeup">
+            <h2>Project Writeup</h2>
+            <h3>1. What have you done so far?</h3>
+            <p>Firstly, we obtained sea surface pH from the IPSL-CM6A-LR climate model and aggregated the monthly timescales into annual averages. The second part of the task was creating a crucial baseline measure of pH, specifically the optimal pH of 8.10 before the era of industrialization to serve as a threshold for measuring marine habitat survivability. After obtaining this information, we created a D3.js line graph depicting the trend of decreasing ocean pH between 1980 and 2014. Lastly, we made an interactive toggle that computes and colors the acidification deficit instantly.</p>
+
+            <h3>2. What will be the most challenging of your project to design and why?</h3>
+            <p>The most difficult part about the assignment will be developing multiple, simultaneously interacting views that correlate the pH values with the actual population numbers of certain marine species. Creating such views entails maintaining the complex state in D3.js where changing any one view instantaneously changes another related visualization without any lagging or freezing. In addition, the biological measurements and their connection with physical pH readings can lead to visual noise in the plot, and we should be careful about the implementation of this functionality. Maintaining a balance between technical constraints and expressiveness criteria is going to be extremely challenging for us.</p>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
