@@ -1,33 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Ocean Acidification Prototype</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Acid Ocean</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
 </head>
 <body>
-    <div id="container">
-        <h1>The Widening Gap: Ocean pH vs. Marine Viability</h1>
-        <p class="subtitle">Hover over the timeline to see historical pH levels, and click the button to visualize the growing deficit against the optimal marine baseline.</p>
-        
-        <div class="controls">
-            <button id="toggleBaseline">Show Acidification Deficit</button>
-        </div>
-
-        <div id="visualization"></div>
-        <div id="tooltip" class="tooltip" style="opacity:0;"></div>
-
-        <div id="writeup">
-            <h2>Project Writeup</h2>
-            <h3>1. What have you done so far?</h3>
-            <p>Firstly, we obtained sea surface pH from the IPSL-CM6A-LR climate model and aggregated the monthly timescales into annual averages. The second part of the task was creating a crucial baseline measure of pH, specifically the optimal pH of 8.10 before the era of industrialization to serve as a threshold for measuring marine habitat survivability. After obtaining this information, we created a D3.js line graph depicting the trend of decreasing ocean pH between 1980 and 2014. Lastly, we made an interactive toggle that computes and colors the acidification deficit instantly.</p>
-
-            <h3>2. What will be the most challenging of your project to design and why?</h3>
-            <p>The most difficult part about the assignment will be developing multiple, simultaneously interacting views that correlate the pH values with the actual population numbers of certain marine species. Creating such views entails maintaining the complex state in D3.js where changing any one view instantaneously changes another related visualization without any lagging or freezing. In addition, the biological measurements and their connection with physical pH readings can lead to visual noise in the plot, and we should be careful about the implementation of this functionality. Maintaining a balance between technical constraints and expressiveness criteria is going to be extremely challenging for us.</p>
-        </div>
+  
+  <!-- WRITEUP SECTION -->
+  <section id="section-writeup">
+    <div class="writeup-inner">
+      <h2 class="writeup-header">Project Writeup</h2>
+      <h3 class="writeup-q">1. What have you done so far?</h3>
+      <p class="writeup-a">Firstly, we obtained ocean pH from the IPSL-CM6A-LR climate model and aggregated the monthly timescales into annual averages. Additionally, we binned regions into 5-degree latitude/longitude sections and took only the surface pH data. After obtaining this information, we created a D3.js line graph depicting the trend of decreasing ocean pH between 1980 and 2014. Also, we made an interactive toggle that computes and colors the acidification deficit instantly. Finally, we made a static line chart and a static global map to show how different regions have changed since 1850.</p>
+      <h3 class="writeup-q">2. What will be the most challenging part of your project to design and why?</h3>
+      <p class="writeup-a">The most difficult part of the assignment will be developing multiple, simultaneously interacting views that correlate the pH values with the actual population numbers of certain marine species. Creating such views entails maintaining the complex state in D3.js where changing any one view instantaneously changes another related visualization without any lagging or freezing. In addition, the biological measurements and their connection with physical pH readings can lead to visual noise in the plot, and we should be careful about the implementation of this functionality. Maintaining a balance between technical constraints and expressiveness criteria is going to be extremely challenging for us.</p>
     </div>
+  </section>
 
-    <script src="main.js"></script>
+  <!-- SECTION 0: HERO -->
+  <section id="hero">
+    <canvas id="hero-canvas"></canvas>
+    <div class="hero-content">
+      <p class="eyebrow">A DATA STORY — 1850 TO 2014</p>
+      <h1>The Ocean Is Changing.<br>Not Everywhere Equally.</h1>
+      <p class="hero-sub">Since industrialization, the world's oceans have absorbed 25–30% of all human CO₂ emissions — and the chemical consequences are written unevenly across every latitude.</p>
+      <div class="scroll-cue">
+        <span>Scroll to explore</span>
+        <div class="scroll-arrow"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 1: GLOBAL TREND -->
+  <section id="section-trend" class="story-section scroll-reveal">
+    <div class="section-text">
+      <span class="section-num">01</span>
+      <h2>165 Years of Decline</h2>
+      <p>From 1850 to 2014, surface ocean pH fell steadily — an acceleration unprecedented in 300 million years of Earth history. A drop of just 0.1 pH units represents a <strong class="hl">26% increase in ocean acidity</strong>, due to the logarithmic nature of the pH scale.</p>
+      <p>The orange line marks the actual 1850 pre-industrial baseline computed from the data — a level the ocean will not return to in any human lifetime.</p>
+    </div>
+    <div class="section-viz">
+      <div id="viz-trend-controls">
+        <button id="btn-toggle-shading">Hide Acidification Deficit</button>
+      </div>
+      <div id="viz-trend"></div>
+      <p class="viz-caption">Global mean sea surface pH · IPSL-CM6A-LR climate model · 1850–2014</p>
+    </div>
+  </section>
+
+  <!-- SECTION 2: REGIONAL DIVERGENCE -->
+  <section id="section-regional" class="story-section scroll-reveal alt-bg">
+    <div class="section-viz">
+      <div id="viz-regional"></div>
+      <p class="viz-caption">Mean surface pH by latitude band · 5 ocean regions · 1850–2014</p>
+    </div>
+    <div class="section-text">
+      <span class="section-num">02</span>
+      <h2>But Not Everywhere Equally</h2>
+      <p>In 1850, every ocean region sat at nearly the same pH. By 2014, they had <strong class="hl">dramatically diverged</strong>. The Arctic — where cold water physically absorbs CO₂ more efficiently — shows the steepest decline.</p>
+      <p>This is the surprise: the regions acidifying fastest are also the ones that support the most fragile, cold-adapted ecosystems — with the least biological buffer against change.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 3: WORLD MAP -->
+  <section id="section-map" class="scroll-reveal">
+    <div class="map-header">
+      <span class="section-num">03</span>
+      <h2>The Geography of Change</h2>
+      <p class="map-sub">pH change from 1850 to 2014 per ocean grid cell. Darker red = largest pH drop = most acidified.</p>
+    </div>
+    <div id="viz-map-container">
+      <div id="viz-map"></div>
+    </div>
+    <div id="map-legend">
+      <span class="legend-label">Less change</span>
+      <svg id="legend-svg"></svg>
+      <span class="legend-label">Most acidified</span>
+    </div>
+  </section>
+
+  <!-- SECTION 4: STAKES -->
+  <section id="section-stakes" class="scroll-reveal">
+    <div class="stakes-header">
+      <span class="section-num">04</span>
+      <h2>What Acidification Means for Life</h2>
+    </div>
+    <div class="stakes-grid">
+      <div class="stake-card">
+        <div class="stake-icon">🦪</div>
+        <h3>Shellfish &amp; Corals</h3>
+        <p>Below pH 7.8, aragonite — the mineral that builds shells and coral skeletons — begins to dissolve. Pacific oyster hatcheries have already suffered mass die-offs attributed to acidification.</p>
+      </div>
+      <div class="stake-card">
+        <div class="stake-icon">🦐</div>
+        <h3>Pteropods</h3>
+        <p>These "sea butterflies" form the base of polar food webs. Their shells visibly dissolve when exposed to projected near-future pH levels in laboratory experiments — putting entire Arctic ecosystems at risk.</p>
+      </div>
+      <div class="stake-card">
+        <div class="stake-icon">🐟</div>
+        <h3>Fish Behavior</h3>
+        <p>Elevated CO₂ disrupts fish sensory systems and decision-making. Studies show reef fish raised in acidified water swim toward predators rather than away — a behavioral reversal with deadly consequences.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 5: CONCLUSION -->
+  <section id="section-conclusion" class="scroll-reveal">
+    <div class="conclusion-inner">
+      <span class="section-num">05</span>
+      <h2>The Ocean Cannot Buffer Forever</h2>
+      <p class="conclusion-text">The data tells a clear story: the ocean has been absorbing humanity's chemical consequences for 165 years. The pH we measured — globally, regionally, and down to the 5° grid cell — has already crossed thresholds that took hundreds of millions of years to evolve around.</p>
+      <div class="big-stats">
+        <div class="big-stat">
+          <span class="big-num">−0.1</span>
+          <span class="big-label">pH units globally since pre-industrial times<br><em>= 26% more acidic</em></span>
+        </div>
+        <div class="big-stat">
+          <span class="big-num">25–30%</span>
+          <span class="big-label">of all human CO₂ emissions<br><em>absorbed by the ocean</em></span>
+        </div>
+      </div>
+      <p class="conclusion-cta">The regions changing fastest are the ones least equipped to adapt. The Arctic is not a canary in a coal mine — it is the coal mine.</p>
+    </div>
+  </section>
+
+  <div id="tooltip"></div>
+
+  <script src="main.js"></script>
 </body>
 </html>
