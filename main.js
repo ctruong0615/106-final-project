@@ -539,7 +539,39 @@ function renderDeltaMap(deltaData, worldTopo) {
     .style('margin', '0 auto');
 
   renderMapLegend(lessChange, mostAcidified, colorScale);
+  renderMapControls();
   renderMapNotes();
+}
+
+function renderMapControls() {
+  d3.select('#map-region-controls').remove();
+
+  const controls = d3.select('#section-map')
+    .append('div')
+    .attr('id', 'map-region-controls');
+
+  controls.append('p')
+    .attr('class', 'map-control-title')
+    .text('Highlight a latitude band');
+
+  const buttons = controls.append('div')
+    .attr('class', 'map-control-buttons');
+
+  buttons.selectAll('button')
+    .data(['All', ...REGION_ORDER])
+    .enter()
+    .append('button')
+    .attr('class', 'map-region-btn')
+    .text(d => d)
+    .on('mouseover', (event, d) => {
+      updateMapRegionFocus(d === 'All' ? null : d);
+    })
+    .on('mouseout', () => {
+      updateMapRegionFocus(null);
+    })
+    .on('click', (event, d) => {
+      updateMapRegionFocus(d === 'All' ? null : d);
+    });
 }
 
 function renderMapNotes() {
