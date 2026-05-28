@@ -35,6 +35,15 @@ function hideTooltip() {
   tooltip.classList.remove('show');
 }
 
+
+// Shared interaction state. The regional line chart can call this after the map exists.
+let updateMapRegionFocus = null;
+let lastMapAlpha = 0.76;
+
+function focusMapRegion(basin) {
+  if (typeof updateMapRegionFocus === 'function') updateMapRegionFocus(basin);
+}
+
 // ── HERO CANVAS ───────────────────────────────────────────────────────────────
 
 function initHeroCanvas() {
@@ -210,7 +219,7 @@ function renderGlobalTrend(data) {
 function renderRegionalChart(series) {
   const el = document.getElementById('viz-regional');
   const W  = el.clientWidth || 560;
-  const m  = { top: 24, right: 110, bottom: 44, left: 58 };
+  const m  = { top: 24, right: 150, bottom: 44, left: 58 };
   const iW = W - m.left - m.right;
   const iH = 340 - m.top - m.bottom;
 
@@ -240,33 +249,122 @@ function renderRegionalChart(series) {
   svg.append('text').attr('transform','rotate(-90)').attr('x',-iH/2).attr('y',-m.left+14)
     .attr('text-anchor','middle').attr('fill','#7fb3c8').style('font-size','11px').text('Sea Surface pH');
 
+  svg.append('text')
+    .attr('x', 0)
+    .attr('y', -9)
+    .attr('fill', '#7fb3c8')
+    .attr('opacity', 0.85)
+    .style('font-size', '10px')
+    .text('Hover a region line or label to highlight the matching latitude band on the map.');
+
   const lineGen = d3.line().x(d => x(d.year)).y(d => y(d.ph)).curve(d3.curveCatmullRom);
+  const labelX = iW + 16;
+  const minLabelGap = 16;
+
+  function spreadLabels(labels) {
+    const sorted = labels.slice().sort((a, b) => a.y - b.y);
+    sorted.forEach((d, i) => {
+      d.labelY = i === 0 ? d.y : Math.max(d.y, sorted[i - 1].labelY + minLabelGap);
+    });
+    const overflow = sorted.length ? sorted[sorted.length - 1].labelY - (iH - 4) : 0;
+    if (overflow > 0) sorted.forEach(d => d.labelY -= overflow);
+    sorted.forEach((d, i) => {
+      d.labelY = i === 0 ? Math.max(4, d.labelY) : Math.max(d.labelY, sorted[i - 1].labelY + minLabelGap);
+    });
+    return sorted;
+  }
+
+  function showRegionTooltip(event, d) {
+    const first = d.values[0];
+    const last = d.values[d.values.length - 1];
+    showTooltip(event,
+      `<strong>${d.basin}</strong><br>` +
+      `1850 pH: ${first.ph.toFixed(4)}<br>` +
+      `2014 pH: ${last.ph.toFixed(4)}<br>` +
+      `<span style="color:#ff4d6d">Δ pH: ${(last.ph - first.ph).toFixed(4)}</span>`);
+  }
+
+  function focusRegionalChart(basin) {
+    svg.selectAll('.regional-line')
+      .attr('opacity', d => !basin || d.basin === basin ? 1 : 0.16)
+      .attr('stroke-width', d => basin && d.basin === basin ? 3.3 : 2.2);
+
+    svg.selectAll('.regional-label, .regional-label-line')
+      .attr('opacity', d => !basin || d.basin === basin ? 1 : 0.18);
+  }
+
+  const labelData = [];
 
   // Draw lines (hidden, revealed on scroll)
   const paths = series.map(({ basin, values }) => {
     const path = svg.append('path')
-      .datum(values)
+      .datum({ basin, values })
+      .attr('class', 'regional-line')
       .attr('fill', 'none')
       .attr('stroke', REGION_COLORS[basin])
       .attr('stroke-width', 2.2)
       .attr('opacity', 0.9)
-      .attr('d', lineGen);
+      .attr('d', d => lineGen(d.values))
+      .on('mouseover', (event, d) => {
+        focusRegionalChart(d.basin);
+        focusMapRegion(d.basin);
+        showRegionTooltip(event, d);
+      })
+      .on('mousemove', (event, d) => showRegionTooltip(event, d))
+      .on('mouseout', () => {
+        focusRegionalChart(null);
+        focusMapRegion(null);
+        hideTooltip();
+      });
 
     const len = path.node().getTotalLength();
     path.attr('stroke-dasharray', `${len} ${len}`).attr('stroke-dashoffset', len);
 
-    // Label at end of line
     const last = values[values.length - 1];
-    svg.append('text')
-      .attr('x', x(last.year) + 6)
-      .attr('y', y(last.ph) + 4)
-      .attr('fill', REGION_COLORS[basin])
-      .style('font-size', '10px')
-      .style('font-weight', '600')
-      .text(basin);
+    labelData.push({ basin, values, x: x(last.year), y: y(last.ph), ph: last.ph });
 
     return path;
   });
+
+  // End labels: spread vertically to avoid overlap, with connector lines back to each series.
+  const placedLabels = spreadLabels(labelData);
+
+  svg.selectAll('.regional-label-line')
+    .data(placedLabels)
+    .enter()
+    .append('line')
+    .attr('class', 'regional-label-line')
+    .attr('x1', d => d.x + 3)
+    .attr('x2', labelX - 5)
+    .attr('y1', d => d.y)
+    .attr('y2', d => d.labelY)
+    .attr('stroke', d => REGION_COLORS[d.basin])
+    .attr('stroke-width', 1)
+    .attr('opacity', 0.45);
+
+  svg.selectAll('.regional-label')
+    .data(placedLabels)
+    .enter()
+    .append('text')
+    .attr('class', 'regional-label')
+    .attr('x', labelX)
+    .attr('y', d => d.labelY + 4)
+    .attr('fill', d => REGION_COLORS[d.basin])
+    .style('font-size', '10px')
+    .style('font-weight', '600')
+    .style('cursor', 'default')
+    .text(d => d.basin)
+    .on('mouseover', (event, d) => {
+      focusRegionalChart(d.basin);
+      focusMapRegion(d.basin);
+      showRegionTooltip(event, d);
+    })
+    .on('mousemove', (event, d) => showRegionTooltip(event, d))
+    .on('mouseout', () => {
+      focusRegionalChart(null);
+      focusMapRegion(null);
+      hideTooltip();
+    });
 
   document.getElementById('section-regional')._animate = () => {
     paths.forEach((path, i) => {
@@ -281,88 +379,152 @@ function renderRegionalChart(series) {
 
 function renderDeltaMap(deltaData, worldTopo) {
   const container = document.getElementById('viz-map');
-  const W = container.parentElement.clientWidth || window.innerWidth * 0.9;
-  const H = Math.round(W * 0.48);
+  const W = Math.min(container.parentElement.clientWidth || window.innerWidth * 0.9, 1180);
+  const H = Math.round(W * 0.50);
 
   const projection = d3.geoNaturalEarth1()
     .scale(W / 6.3)
     .translate([W / 2, H / 2]);
 
   const path = d3.geoPath().projection(projection);
+  const countries = topojson.feature(worldTopo, worldTopo.objects.countries);
 
-  // Color scale: delta is negative (pH dropped), domain [minDelta, 0]
-  const [minDelta] = d3.extent(deltaData, d => d.delta);
+  function normalizeLon(lon) {
+    return lon > 180 ? lon - 360 : lon;
+  }
+
+  const cells = deltaData.map(d => {
+    const lon = normalizeLon(d.lon);
+    const [px, py] = projection([lon, d.lat]) || [];
+
+    return {
+      ...d,
+      lon,
+      px,
+      py,
+      basin: getBasin(d.lat)
+    };
+  }).filter(d => d.px != null && !isNaN(d.px));
+
+  const negativeDeltas = cells
+    .map(d => d.delta)
+    .filter(d => Number.isFinite(d) && d <= 0)
+    .sort(d3.ascending);
+
+  const lessChange = d3.quantile(negativeDeltas, 0.95);
+  const mostAcidified = d3.quantile(negativeDeltas, 0.05);
+
   const colorScale = d3.scaleSequential()
-    .domain([minDelta, 0])
-    .interpolator(d3.interpolateRgbBasis(['#ff4d6d', '#f4a261', '#fffde7', '#e2f0f7']));
+    .domain([lessChange, mostAcidified])
+    .interpolator(d3.interpolateRgbBasis(['#e2f0f7', '#f4a261', '#ff4d6d']))
+    .clamp(true);
 
-  // SVG basemap
   const svg = d3.select('#viz-map').append('svg')
-    .attr('width', W).attr('height', H)
-    .style('position', 'absolute').style('top', 0).style('left', 0)
+    .attr('width', W)
+    .attr('height', H)
+    .style('display', 'block')
+    .style('margin', '0 auto')
     .attr('class', 'viz-svg');
 
-  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#010a14');
+  svg.append('rect')
+    .attr('width', W)
+    .attr('height', H)
+    .attr('fill', '#010a14');
 
   svg.append('path')
     .datum(d3.geoGraticule().step([30, 30])())
-    .attr('d', path).attr('fill', 'none')
-    .attr('stroke', '#0a2540').attr('stroke-width', 0.5);
+    .attr('d', path)
+    .attr('fill', 'none')
+    .attr('stroke', '#0a2540')
+    .attr('stroke-width', 0.45)
+    .attr('opacity', 0.4);
+
+  //const dotRadius = Math.max(10, Math.min(6.8, W / 190)); // complete overlap
+  const dotRadius = Math.max(4.4, Math.min(5.6, W / 220)); // covers part of each cell
+
+  const dots = svg.append('g')
+    .attr('class', 'map-dot-layer')
+    .selectAll('.map-dot')
+    .data(cells)
+    .enter()
+    .append('circle')
+    .attr('class', 'map-dot')
+    .attr('cx', d => d.px)
+    .attr('cy', d => d.py)
+    .attr('r', dotRadius)
+    .attr('fill', d => colorScale(d.delta))
+    .attr('opacity', 0.9)
 
   svg.append('path')
-    .datum(topojson.feature(worldTopo, worldTopo.objects.countries))
-    .attr('d', path).attr('fill', '#0f1a24')
-    .attr('stroke', '#1a3a52').attr('stroke-width', 0.4);
-
-  // Canvas data layer
-  const canvas = d3.select('#viz-map').append('canvas')
-    .attr('width', W).attr('height', H)
-    .style('position', 'absolute').style('top', 0).style('left', 0)
+    .datum(countries)
+    .attr('d', path)
+    .attr('fill', '#0f1a24')
+    .attr('stroke', '#1a3a52')
+    .attr('stroke-width', 0.45)
+    .attr('opacity', 0.96)
     .style('pointer-events', 'none');
 
-  const ctx = canvas.node().getContext('2d');
+  const focusBox = svg.append('g')
+    .attr('opacity', 0)
+    .style('pointer-events', 'none');
 
-  // Pre-project cell centers for quadtree + canvas
-  const projected = deltaData.map(d => {
-    const [px, py] = projection([d.lon, d.lat]) || [];
-    return { ...d, px, py };
-  }).filter(d => d.px != null && !isNaN(d.px));
+  focusBox.append('rect')
+    .attr('x', 14)
+    .attr('y', 12)
+    .attr('width', 270)
+    .attr('height', 32)
+    .attr('rx', 6)
+    .attr('fill', 'rgba(2,13,26,0.78)')
+    .attr('stroke', '#0e3d5c')
+    .attr('stroke-width', 1);
 
-  // Cell half-size in pixels (5° grid)
-  const cellPx = Math.abs(projection([5, 0])[0] - projection([0, 0])[0]) * 0.9;
+  const focusLabel = focusBox.append('text')
+    .attr('x', 28)
+    .attr('y', 33)
+    .attr('fill', '#90e0ef')
+    .style('font-size', '12px')
+    .style('font-weight', '600');
 
-  function drawCells(alpha) {
-    ctx.clearRect(0, 0, W, H);
-    projected.forEach(d => {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = colorScale(d.delta);
-      ctx.fillRect(d.px - cellPx / 2, d.py - cellPx / 2, cellPx, cellPx);
-    });
-    ctx.globalAlpha = 1;
-  }
+  updateMapRegionFocus = basin => {
+    dots
+      .attr('opacity', d => {
+        if (!basin) return 0.88;
+        return d.basin === basin ? 1 : 0.10;
+      })
+      .attr('r', d => {
+        if (!basin) return dotRadius;
+        return d.basin === basin ? dotRadius * 1.15 : dotRadius * 0.8;
+      });
 
-  document.getElementById('section-map')._animate = () => {
-    let start = null;
-    function frame(ts) {
-      if (!start) start = ts;
-      const t = Math.min((ts - start) / 900, 1);
-      drawCells(t * 0.88);
-      if (t < 1) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
+    focusBox.attr('opacity', basin ? 1 : 0);
+    focusLabel.text(basin ? `Highlighted latitude band: ${basin}` : '');
   };
 
-  // Quadtree for tooltip
-  const qt = d3.quadtree().x(d => d.px).y(d => d.py).addAll(projected);
+  document.getElementById('section-map')._animate = () => {
+    dots.transition()
+      .duration(900)
+      .delay((d, i) => Math.min(i * 1.2, 350))
+      .attr('opacity', 0.88);
+  };
 
-  svg.append('rect').attr('width', W).attr('height', H)
-    .attr('fill', 'none').attr('pointer-events', 'all')
+  const qt = d3.quadtree()
+    .x(d => d.px)
+    .y(d => d.py)
+    .addAll(cells);
+
+  svg.append('rect')
+    .attr('width', W)
+    .attr('height', H)
+    .attr('fill', 'none')
+    .attr('pointer-events', 'all')
     .on('mousemove', event => {
       const [mx, my] = d3.pointer(event);
       const nearest = qt.find(mx, my, 20);
+
       if (nearest) {
         showTooltip(event,
-          `<strong>${nearest.lat}°, ${nearest.lon}°</strong><br>` +
+          `<strong>${nearest.basin}</strong><br>` +
+          `${nearest.lat}°, ${nearest.lon}°<br>` +
           `1850 pH: ${nearest.ph1850.toFixed(4)}<br>` +
           `2014 pH: ${nearest.ph2014.toFixed(4)}<br>` +
           `<span style="color:#ff4d6d">Δ pH: ${nearest.delta.toFixed(4)}</span>`);
@@ -370,36 +532,96 @@ function renderDeltaMap(deltaData, worldTopo) {
     })
     .on('mouseleave', hideTooltip);
 
-  // Container sizing
-  d3.select('#viz-map').style('position', 'relative').style('height', H + 'px');
+  d3.select('#viz-map')
+    .style('position', 'relative')
+    .style('height', H + 'px')
+    .style('max-width', W + 'px')
+    .style('margin', '0 auto');
 
-  // Legend
-  renderMapLegend(minDelta, colorScale);
+  renderMapLegend(lessChange, mostAcidified, colorScale);
+  renderMapNotes();
 }
 
-function renderMapLegend(minDelta, colorScale) {
-  const lW = 220, lH = 14;
+function renderMapNotes() {
+  d3.select('#map-annotation-cards').remove();
+
+  const notes = [
+    {
+      title: 'Polar regions shift fastest',
+      text: 'The strongest red bands appear near Arctic and Southern Ocean waters, showing that acidification is not evenly distributed.'
+    },
+    {
+      title: 'Tropical regions are more stable',
+      text: 'Many tropical grid cells show lighter colors, meaning their pH changed less than high-latitude regions.'
+    },
+    {
+      title: 'Hover connects map and region chart',
+      text: 'Moving over a regional line highlights the matching latitude band on this map, linking the trend view to the geography view.'
+    }
+  ];
+
+  const wrap = d3.select('#section-map')
+    .append('div')
+    .attr('id', 'map-annotation-cards');
+
+  const cards = wrap.selectAll('.map-note-card')
+    .data(notes)
+    .enter()
+    .append('div')
+    .attr('class', 'map-note-card');
+
+  cards.append('h4')
+    .text(d => d.title);
+
+  cards.append('p')
+    .text(d => d.text);
+}
+
+function renderMapLegend(lessChange, mostAcidified, colorScale) {
+  const lW = 220;
+  const lH = 14;
+
   const svg = d3.select('#legend-svg')
-    .attr('width', lW + 8).attr('height', lH + 22);
+    .attr('width', lW + 8)
+    .attr('height', lH + 22);
+
+  svg.selectAll('*').remove();
 
   const defs = svg.append('defs');
-  const grad = defs.append('linearGradient').attr('id', 'delta-grad');
+
+  const grad = defs.append('linearGradient')
+    .attr('id', 'delta-grad')
+    .attr('x1', '0%')
+    .attr('x2', '100%');
+
   d3.range(0, 1.01, 0.05).forEach(t => {
+    const value = lessChange + t * (mostAcidified - lessChange);
+
     grad.append('stop')
       .attr('offset', `${t * 100}%`)
-      .attr('stop-color', colorScale(minDelta + t * (0 - minDelta)));
+      .attr('stop-color', colorScale(value));
   });
 
-  svg.append('rect').attr('width', lW).attr('height', lH)
-    .attr('rx', 3).attr('fill', 'url(#delta-grad)');
+  svg.append('rect')
+    .attr('width', lW)
+    .attr('height', lH)
+    .attr('rx', 3)
+    .attr('fill', 'url(#delta-grad)');
 
-  svg.append('text').attr('x', 0).attr('y', lH + 14)
-    .attr('fill', '#7fb3c8').style('font-size', '10px')
-    .text(minDelta.toFixed(3));
+  svg.append('text')
+    .attr('x', 0)
+    .attr('y', lH + 14)
+    .attr('fill', '#7fb3c8')
+    .style('font-size', '10px')
+    .text(lessChange.toFixed(3));
 
-  svg.append('text').attr('x', lW).attr('y', lH + 14)
-    .attr('text-anchor', 'end').attr('fill', '#7fb3c8').style('font-size', '10px')
-    .text('0.000');
+  svg.append('text')
+    .attr('x', lW)
+    .attr('y', lH + 14)
+    .attr('text-anchor', 'end')
+    .attr('fill', '#7fb3c8')
+    .style('font-size', '10px')
+    .text(mostAcidified.toFixed(3));
 }
 
 // ── SCROLL OBSERVER ───────────────────────────────────────────────────────────
