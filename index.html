@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/topojson-client@3"></script>
+  <script src="https://unpkg.com/scrollama"></script>
 </head>
 <body>
   
@@ -61,10 +62,14 @@
     <div class="map-header">
       <span class="section-num">03</span>
       <h2>The Geography of Change</h2>
-      <p class="map-sub">Each dot = one 5° ocean grid cell. Darker red = larger pH drop from 1850 to 2014.</p>
+      <p class="map-sub">Each band shows mean surface pH change from 1850. Darker red = more acidified. Drag the slider to explore any year.</p>
     </div>
     <div id="viz-map-container">
       <div id="viz-map"></div>
+    </div>
+    <div id="map-year-control">
+      <input type="range" id="map-year-slider" min="1850" max="2014" step="1" value="1850">
+      <span id="map-year-readout">1850</span>
     </div>
     <div id="map-legend">
       <span class="legend-label">Less change</span>
@@ -73,10 +78,76 @@
     </div>
   </section>
 
-  <!-- SECTION 4: STAKES -->
+  <!-- SECTION 4: REGIONAL DEPTH EXPLORER -->
+  <section id="section-depth" class="scroll-reveal">
+    <div class="depth-header">
+      <span class="section-num">04</span>
+      <h2>A Region-by-Region Breakdown</h2>
+      <p class="depth-sub">Scroll through each latitude band to see how its pH has changed since 1850 — and how the pace of change varies across the globe.</p>
+    </div>
+
+    <div class="scrollama-container" id="scrollama-container">
+      <div class="sticky-chart-wrap">
+        <div id="viz-depth-sticky"></div>
+        <p class="viz-caption" id="depth-chart-caption">Sea surface pH · IPSL-CM6A-LR · 1850–2014</p>
+      </div>
+
+      <div class="steps-container" id="scrollama-steps">
+
+        <div class="step" data-region="Arctic">
+          <div class="step-inner">
+            <span class="step-region-tag" style="color:#ff4d6d">Arctic  (&gt;60°N)</span>
+            <h3>The Fastest-Changing Ocean</h3>
+            <p>Cold polar water physically dissolves CO₂ more efficiently than warm water, making the Arctic the single most acidified region on the planet. Its pH has dropped by more than <strong class="hl">0.11 units</strong> since 1850 — the steepest decline of any latitude band.</p>
+            <p>As sea ice retreats and exposes fresh surface area, the feedback accelerates. Pteropods and cold-adapted shell-builders are already living near their physiological limits.</p>
+          </div>
+        </div>
+
+        <div class="step" data-region="N. Temperate">
+          <div class="step-inner">
+            <span class="step-region-tag" style="color:#f4a261">N. Temperate (30–60°N)</span>
+            <h3>The World's Fisheries Under Pressure</h3>
+            <p>The North Temperate band spans the Atlantic and Pacific fishing grounds that feed billions of people. A steady, relentless drop of roughly <strong class="hl">0.09 pH units</strong> is playing out across the same waters where oysters, scallops, and herring reproduce.</p>
+            <p>Upwelling zones along western coasts — already corrosive — are intensifying, bringing deep acidic water closer to the surface than at any point in recorded history.</p>
+          </div>
+        </div>
+
+        <div class="step" data-region="Tropical">
+          <div class="step-inner">
+            <span class="step-region-tag" style="color:#90e0ef">Tropical (30°S–30°N)</span>
+            <h3>Coral Reefs on a Knife's Edge</h3>
+            <p>Warmer tropical water holds less dissolved CO₂, so the absolute pH drop here is smaller than at the poles. But the baseline pH is also higher — and coral reefs need that buffer. Aragonite saturation is falling toward the threshold below which reef-building becomes impossible.</p>
+            <p>Combined with heat-driven bleaching, even modest acidification creates a dual stressor that many reef systems cannot survive.</p>
+          </div>
+        </div>
+
+        <div class="step" data-region="S. Temperate">
+          <div class="step-inner">
+            <span class="step-region-tag" style="color:#48cae4">S. Temperate (60–30°S)</span>
+            <h3>Open Water, Wide Impact</h3>
+            <p>The Southern Temperate band is dominated by open ocean with few land masses to interrupt circulation. The Antarctic Circumpolar Current sweeps acidified water eastward around the globe, distributing the signal across both hemispheres.</p>
+            <p>The Patagonian shelf — one of the most productive fisheries on Earth — sits squarely in this band and is already seeing pH readings that threaten juvenile squid and toothfish populations.</p>
+          </div>
+        </div>
+
+        <div class="step" data-region="Southern Ocean">
+          <div class="step-inner">
+            <span class="step-region-tag" style="color:#0077b6">Southern Ocean (&lt;60°S)</span>
+            <h3>A Sink That Cannot Stop Absorbing</h3>
+            <p>The Southern Ocean absorbs roughly <strong class="hl">40%</strong> of all oceanic CO₂ uptake — far more than its surface area would suggest. That efficiency comes at a cost: it is acidifying faster than virtually any other region outside the Arctic.</p>
+            <p>Antarctic krill, which sustain the entire food web from penguins to whales, are losing their calcified egg capsules at lower pH. A collapse here would reverberate through the entire Southern Hemisphere ecosystem.</p>
+          </div>
+        </div>
+
+      </div><!-- /steps-container -->
+    </div><!-- /scrollama-container -->
+
+  </section>
+
+  <!-- SECTION 5: STAKES -->
   <section id="section-stakes" class="scroll-reveal">
     <div class="stakes-header">
-      <span class="section-num">04</span>
+      <span class="section-num">05</span>
       <h2>What Acidification Means for Life</h2>
     </div>
     <div class="stakes-grid">
@@ -98,10 +169,10 @@
     </div>
   </section>
 
-  <!-- SECTION 5: CONCLUSION -->
+  <!-- SECTION 6: CONCLUSION -->
   <section id="section-conclusion" class="scroll-reveal">
     <div class="conclusion-inner">
-      <span class="section-num">05</span>
+      <span class="section-num">06</span>
       <h2>The Ocean Cannot Buffer Forever</h2>
       <p class="conclusion-text">The data tells a clear story: the ocean has been absorbing humanity's chemical consequences for 165 years. The pH we measured — globally, regionally, and down to the 5° grid cell — has already crossed thresholds that took hundreds of millions of years to evolve around.</p>
       <div class="big-stats">

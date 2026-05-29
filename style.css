@@ -544,3 +544,209 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
 }
+
+/* ── SECTION 4: REGIONAL DEPTH EXPLORER ──────────── */
+#section-depth {
+  padding: 5rem 0 0;
+  background: var(--mid);
+}
+
+.depth-header {
+  max-width: 760px;
+  margin: 0 auto 2rem;
+  text-align: center;
+  padding: 0 clamp(1.5rem, 5vw, 6rem);
+}
+
+.depth-header h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.75rem, 3.5vw, 2.8rem);
+  margin-bottom: 0.75rem;
+}
+
+.depth-sub {
+  font-size: 1rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+
+/* ── MAP YEAR SLIDER ──────────────────────────────── */
+#map-year-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0.9rem auto 0;
+  max-width: 1180px;
+}
+
+#map-year-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 420px;
+  max-width: 68%;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+#map-year-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--teal);
+  cursor: pointer;
+  border: 2px solid var(--deep);
+  box-shadow: 0 0 6px rgba(0,180,216,0.5);
+}
+
+#map-year-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--teal);
+  cursor: pointer;
+  border: 2px solid var(--deep);
+}
+
+#map-year-readout {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  color: var(--glow);
+  min-width: 4ch;
+}
+
+/* Scrollama full-bleed overlay layout */
+.scrollama-container {
+  position: relative;
+}
+
+.sticky-chart-wrap {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.steps-container {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  width: 44%;
+  padding: 0 0 0 clamp(1.5rem, 5vw, 6rem);
+  margin-top: -100vh;
+}
+
+.step {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding: 2rem 0;
+  opacity: 0.25;
+  transition: opacity 0.45s ease;
+}
+
+.step.is-active {
+  opacity: 1;
+}
+
+.step-inner {
+  background: rgba(2, 13, 26, 0.78);
+  border: 1px solid rgba(144, 224, 239, 0.18);
+  border-radius: 14px;
+  padding: 2rem 1.75rem;
+  pointer-events: all;
+}
+
+.step-region-tag {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.65rem;
+}
+
+.step-inner h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  margin-bottom: 0.9rem;
+  line-height: 1.25;
+}
+
+.step-inner p {
+  font-size: 0.95rem;
+  line-height: 1.78;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.step-inner p:last-child { margin-bottom: 0; }
+
+/* Sticky chart column */
+.sticky-chart-wrap {
+  flex: 0 0 57%;
+  position: sticky;
+  top: 10vh;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#viz-depth-sticky {
+  flex: 1;
+  min-height: 340px;
+}
+
+#depth-chart-caption {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  opacity: 0.7;
+  text-align: center;
+}
+
+/* Large year counter overlaid on the map */
+.depth-year-label {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  font-weight: 700;
+  color: rgba(144, 224, 239, 0.88);
+  text-shadow: 0 0 22px rgba(0, 180, 216, 0.55);
+  pointer-events: none;
+  letter-spacing: 0.06em;
+  z-index: 2;
+  white-space: nowrap;
+  min-width: 6ch;
+  text-align: center;
+}
+
+
+@media (max-width: 780px) {
+  .sticky-chart-wrap {
+    position: static;
+    height: 55vw;
+    min-height: 260px;
+  }
+
+  .steps-container {
+    width: 100%;
+    padding: 0 1.25rem;
+    margin-top: 0;
+  }
+
+  .step {
+    min-height: auto;
+    padding: 1.25rem 0;
+  }
+}

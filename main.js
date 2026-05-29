@@ -127,9 +127,12 @@ Promise.all([
     return { lat, lon, delta: r2014.ph - r1850.ph, ph1850: r1850.ph, ph2014: r2014.ph };
   }).filter(Boolean);
 
+  const explorerSeries = aggregateExplorerRegions(data);
+
   renderGlobalTrend(globalByYear);
   renderRegionalChart(regionalSeries);
-  renderDeltaMap(deltaData, worldTopo);
+  renderDeltaMap(deltaData, worldTopo, regionalMap);
+  renderDepthExplorer(explorerSeries, data, worldTopo);
   setupObserver();
 });
 
@@ -377,7 +380,7 @@ function renderRegionalChart(series) {
 
 // ── VIZ 3: DELTA MAP ──────────────────────────────────────────────────────────
 
-function renderDeltaMap(deltaData, worldTopo) {
+function renderDeltaMap(deltaData, worldTopo, regionalMap) {
   const container = document.getElementById('viz-map');
   const W = Math.min(container.parentElement.clientWidth || window.innerWidth * 0.9, 1180);
   const H = Math.round(W * 0.50);
@@ -388,36 +391,6 @@ function renderDeltaMap(deltaData, worldTopo) {
 
   const path = d3.geoPath().projection(projection);
   const countries = topojson.feature(worldTopo, worldTopo.objects.countries);
-
-  function normalizeLon(lon) {
-    return lon > 180 ? lon - 360 : lon;
-  }
-
-  const cells = deltaData.map(d => {
-    const lon = normalizeLon(d.lon);
-    const [px, py] = projection([lon, d.lat]) || [];
-
-    return {
-      ...d,
-      lon,
-      px,
-      py,
-      basin: getBasin(d.lat)
-    };
-  }).filter(d => d.px != null && !isNaN(d.px));
-
-  const negativeDeltas = cells
-    .map(d => d.delta)
-    .filter(d => Number.isFinite(d) && d <= 0)
-    .sort(d3.ascending);
-
-  const lessChange = d3.quantile(negativeDeltas, 0.95);
-  const mostAcidified = d3.quantile(negativeDeltas, 0.05);
-
-  const colorScale = d3.scaleSequential()
-    .domain([lessChange, mostAcidified])
-    .interpolator(d3.interpolateRgbBasis(['#e2f0f7', '#f4a261', '#ff4d6d']))
-    .clamp(true);
 
   const svg = d3.select('#viz-map').append('svg')
     .attr('width', W)
@@ -439,22 +412,50 @@ function renderDeltaMap(deltaData, worldTopo) {
     .attr('stroke-width', 0.45)
     .attr('opacity', 0.4);
 
-  //const dotRadius = Math.max(10, Math.min(6.8, W / 190)); // complete overlap
-  const dotRadius = Math.max(4.4, Math.min(5.6, W / 220)); // covers part of each cell
+  // ── Lat-band polygons ─────────────────────────────────────────────────────
+  const LAT_BANDS = [
+    { basin: 'Arctic',         lat1: 60,  lat2: 90  },
+    { basin: 'N. Temperate',   lat1: 30,  lat2: 60  },
+    { basin: 'Tropical',       lat1: -30, lat2: 30  },
+    { basin: 'S. Temperate',   lat1: -60, lat2: -30 },
+    { basin: 'Southern Ocean', lat1: -90, lat2: -60 },
+  ];
 
-  const dots = svg.append('g')
-    .attr('class', 'map-dot-layer')
-    .selectAll('.map-dot')
-    .data(cells)
-    .enter()
-    .append('circle')
-    .attr('class', 'map-dot')
-    .attr('cx', d => d.px)
-    .attr('cy', d => d.py)
-    .attr('r', dotRadius)
-    .attr('fill', d => colorScale(d.delta))
-    .attr('opacity', 0.9)
+  const bandColorScale = d3.scaleSequential()
+    .domain([0, -0.14])
+    .interpolator(d3.interpolateRgbBasis(['#e2f0f7', '#f4a261', '#ff4d6d']))
+    .clamp(true);
 
+  const sliderEl = document.getElementById('map-year-slider');
+  const yearReadout = d3.select('#map-year-readout');
+
+  // Clip bands to the Natural Earth oval
+  svg.append('defs').append('clipPath').attr('id', 'globe-clip')
+    .append('path').datum({ type: 'Sphere' }).attr('d', path);
+
+  // Use SVG rects positioned at projected lat coordinates — avoids all GeoJSON
+  // winding-order issues near the poles that arise with d3's spherical renderer
+  const bandPaths = svg.append('g').attr('class', 'band-layer').attr('clip-path', 'url(#globe-clip)')
+    .selectAll('.lat-band')
+    .data(LAT_BANDS)
+    .enter().append('rect')
+    .attr('class', 'lat-band')
+    .attr('x', 0)
+    .attr('width', W)
+    .attr('y', d => {
+      const py1 = (projection([0, d.lat1]) || [0, 0])[1];
+      const py2 = (projection([0, d.lat2]) || [0, 0])[1];
+      return Math.min(py1, py2);
+    })
+    .attr('height', d => {
+      const py1 = (projection([0, d.lat1]) || [0, 0])[1];
+      const py2 = (projection([0, d.lat2]) || [0, 0])[1];
+      return Math.abs(py2 - py1);
+    })
+    .attr('fill', '#e2f0f7')
+    .attr('opacity', 0.82);
+
+  // Land mask on top
   svg.append('path')
     .datum(countries)
     .attr('d', path)
@@ -464,73 +465,49 @@ function renderDeltaMap(deltaData, worldTopo) {
     .attr('opacity', 0.96)
     .style('pointer-events', 'none');
 
-  const focusBox = svg.append('g')
-    .attr('opacity', 0)
-    .style('pointer-events', 'none');
+  function updateBands(year) {
+    bandPaths.attr('fill', d => {
+      const ph1850 = regionalMap.get(d.basin)?.get(1850);
+      const phYear = regionalMap.get(d.basin)?.get(year);
+      return (ph1850 != null && phYear != null) ? bandColorScale(phYear - ph1850) : '#334';
+    });
+    yearReadout.text(year);
+    const pct = ((year - 1850) / (2014 - 1850)) * 100;
+    sliderEl.style.background = `linear-gradient(to right, var(--teal) ${pct}%, #0e2a3d ${pct}%)`;
+  }
 
-  focusBox.append('rect')
-    .attr('x', 14)
-    .attr('y', 12)
-    .attr('width', 270)
-    .attr('height', 32)
-    .attr('rx', 6)
-    .attr('fill', 'rgba(2,13,26,0.78)')
-    .attr('stroke', '#0e3d5c')
-    .attr('stroke-width', 1);
-
-  const focusLabel = focusBox.append('text')
-    .attr('x', 28)
-    .attr('y', 33)
-    .attr('fill', '#90e0ef')
-    .style('font-size', '12px')
-    .style('font-weight', '600');
-
+  // Cross-link with Viz 2 regional chart hover
   updateMapRegionFocus = basin => {
-    dots
-      .attr('opacity', d => {
-        if (!basin) return 0.88;
-        return d.basin === basin ? 1 : 0.10;
-      })
-      .attr('r', d => {
-        if (!basin) return dotRadius;
-        return d.basin === basin ? dotRadius * 1.15 : dotRadius * 0.8;
-      });
-
-    focusBox.attr('opacity', basin ? 1 : 0);
-    focusLabel.text(basin ? `Highlighted latitude band: ${basin}` : '');
+    bandPaths
+      .attr('opacity', d => !basin || d.basin === basin ? 0.88 : 0.28)
+      .attr('stroke', d => basin && d.basin === basin ? 'rgba(144,224,239,0.55)' : 'none')
+      .attr('stroke-width', 2);
   };
+
+  bandPaths
+    .on('mouseover', (event, d) => {
+      const year = +sliderEl.value;
+      const ph1850 = regionalMap.get(d.basin)?.get(1850);
+      const phYear = regionalMap.get(d.basin)?.get(year);
+      const delta = (ph1850 != null && phYear != null) ? phYear - ph1850 : null;
+      showTooltip(event,
+        `<strong>${d.basin}</strong><br>` +
+        `${year} pH: ${phYear?.toFixed(4) ?? '—'}<br>` +
+        `<span style="color:#ff4d6d">Δ from 1850: ${delta?.toFixed(4) ?? '—'}</span>`);
+    })
+    .on('mousemove', moveTooltip)
+    .on('mouseout', hideTooltip);
+
+  sliderEl.addEventListener('input', () => updateBands(+sliderEl.value));
+
+  updateBands(1850);
 
   document.getElementById('section-map')._animate = () => {
-    dots.transition()
-      .duration(900)
-      .delay((d, i) => Math.min(i * 1.2, 350))
-      .attr('opacity', 0.88);
+    bandPaths.attr('opacity', 0)
+      .transition().duration(900)
+      .delay((d, i) => i * 100)
+      .attr('opacity', 0.82);
   };
-
-  const qt = d3.quadtree()
-    .x(d => d.px)
-    .y(d => d.py)
-    .addAll(cells);
-
-  svg.append('rect')
-    .attr('width', W)
-    .attr('height', H)
-    .attr('fill', 'none')
-    .attr('pointer-events', 'all')
-    .on('mousemove', event => {
-      const [mx, my] = d3.pointer(event);
-      const nearest = qt.find(mx, my, 20);
-
-      if (nearest) {
-        showTooltip(event,
-          `<strong>${nearest.basin}</strong><br>` +
-          `${nearest.lat}°, ${nearest.lon}°<br>` +
-          `1850 pH: ${nearest.ph1850.toFixed(4)}<br>` +
-          `2014 pH: ${nearest.ph2014.toFixed(4)}<br>` +
-          `<span style="color:#ff4d6d">Δ pH: ${nearest.delta.toFixed(4)}</span>`);
-      }
-    })
-    .on('mouseleave', hideTooltip);
 
   d3.select('#viz-map')
     .style('position', 'relative')
@@ -538,40 +515,8 @@ function renderDeltaMap(deltaData, worldTopo) {
     .style('max-width', W + 'px')
     .style('margin', '0 auto');
 
-  renderMapLegend(lessChange, mostAcidified, colorScale);
-  renderMapControls();
+  renderMapLegend(0, -0.14, bandColorScale);
   renderMapNotes();
-}
-
-function renderMapControls() {
-  d3.select('#map-region-controls').remove();
-
-  const controls = d3.select('#section-map')
-    .append('div')
-    .attr('id', 'map-region-controls');
-
-  controls.append('p')
-    .attr('class', 'map-control-title')
-    .text('Highlight a latitude band');
-
-  const buttons = controls.append('div')
-    .attr('class', 'map-control-buttons');
-
-  buttons.selectAll('button')
-    .data(['All', ...REGION_ORDER])
-    .enter()
-    .append('button')
-    .attr('class', 'map-region-btn')
-    .text(d => d)
-    .on('mouseover', (event, d) => {
-      updateMapRegionFocus(d === 'All' ? null : d);
-    })
-    .on('mouseout', () => {
-      updateMapRegionFocus(null);
-    })
-    .on('click', (event, d) => {
-      updateMapRegionFocus(d === 'All' ? null : d);
-    });
 }
 
 function renderMapNotes() {
@@ -584,11 +529,11 @@ function renderMapNotes() {
     },
     {
       title: 'Tropical regions are more stable',
-      text: 'Many tropical grid cells show lighter colors, meaning their pH changed less than high-latitude regions.'
+      text: 'The tropical band shows lighter colors, meaning its pH changed less than high-latitude regions.'
     },
     {
-      title: 'Hover connects map and region chart',
-      text: 'Moving over a regional line highlights the matching latitude band on this map, linking the trend view to the geography view.'
+      title: 'Drag the slider to see the change',
+      text: 'The map starts at the 1850 baseline — all blue. Drag right toward 2014 to watch the poles redden decades before the tropics.'
     }
   ];
 
@@ -656,6 +601,319 @@ function renderMapLegend(lessChange, mostAcidified, colorScale) {
     .text(mostAcidified.toFixed(3));
 }
 
+// ── VIZ 4: REGIONAL DEPTH EXPLORER ───────────────────────────────────────────
+
+const EXPLORER_REGION_COLORS = {
+  'Arctic':        '#ff4d6d',
+  'N. Temperate':  '#f4a261',
+  'Tropical':      '#90e0ef',
+  'S. Temperate':  '#48cae4',
+  'Southern Ocean':'#0077b6',
+  'High Arctic':   '#ff8fa3',
+  'Subpolar':      '#ffd166',
+  'Deep Tropics':  '#06d6a0',
+};
+
+const EXPLORER_REGION_ORDER = [
+  'Arctic', 'N. Temperate', 'Tropical', 'S. Temperate', 'Southern Ocean',
+  'High Arctic', 'Subpolar', 'Deep Tropics',
+];
+
+function getExplorerBasin(lat) {
+  if (lat > 70)  return 'High Arctic';
+  if (lat > 60)  return 'Subpolar';
+  if (lat > 30)  return 'N. Temperate';
+  if (lat > 15)  return null;            // upper tropics — not a separate band
+  if (lat > -15) return 'Deep Tropics';
+  if (lat > -30) return null;            // lower tropics
+  if (lat > -60) return 'S. Temperate';
+  return 'Southern Ocean';
+}
+
+function aggregateExplorerRegions(data) {
+  // 5 standard lat bands (same definition as Viz 2)
+  const standardMap = d3.rollup(
+    data,
+    v => d3.mean(v, d => d.ph),
+    d => getBasin(d.lat),
+    d => d.year
+  );
+
+  const standard = REGION_ORDER.map(basin => ({
+    basin,
+    values: Array.from(standardMap.get(basin) || [], ([year, ph]) => ({ year, ph }))
+              .sort((a, b) => a.year - b.year),
+  }));
+
+  // 3 finer-grained bands
+  const fineRows = data.filter(d => getExplorerBasin(d.lat) !== null);
+  const fineMap = d3.rollup(
+    fineRows,
+    v => d3.mean(v, d => d.ph),
+    d => getExplorerBasin(d.lat),
+    d => d.year
+  );
+
+  const fine = ['High Arctic', 'Subpolar', 'Deep Tropics'].map(basin => ({
+    basin,
+    values: Array.from(fineMap.get(basin) || [], ([year, ph]) => ({ year, ph }))
+              .sort((a, b) => a.year - b.year),
+  }));
+
+  return [...standard, ...fine];
+}
+
+function renderDepthExplorer(allExplorerSeries, data, worldTopo) {
+  // ── Pre-process data ──────────────────────────────────────────────────────
+  // Per-cell year→pH lookup. Key uses raw lon (may be >180) to match data.
+  const cellYearPH = new Map();
+  data.forEach(d => {
+    const key = `${d.lat},${d.lon}`;
+    if (!cellYearPH.has(key)) cellYearPH.set(key, new Map());
+    cellYearPH.get(key).set(d.year, d.ph);
+  });
+
+  // pH → color: high pH (healthy) = cool blue, low pH (acidified) = red
+  const sortedPH = data.map(d => d.ph).filter(Number.isFinite).sort(d3.ascending);
+  const phLow  = d3.quantile(sortedPH, 0.01);
+  const phHigh = d3.quantile(sortedPH, 0.99);
+  const phColor = d3.scaleSequential()
+    .domain([phHigh, phLow])
+    .interpolator(d3.interpolateRgbBasis(['#caf0f8', '#90e0ef', '#f4a261', '#ff4d6d']))
+    .clamp(true);
+
+  // ── Map setup ─────────────────────────────────────────────────────────────
+  const container = document.getElementById('viz-depth-sticky');
+  container.style.position = 'relative';
+
+  const W = container.clientWidth || 640;
+  const H = container.clientHeight || 400;
+
+  const projection = d3.geoNaturalEarth1().scale(W / 6.3).translate([W / 2, H / 2]);
+  const geoPath    = d3.geoPath().projection(projection);
+  const countries  = topojson.feature(worldTopo, worldTopo.objects.countries);
+
+  // Unique cells with projected pixel coords; rawKey matches cellYearPH keys
+  const seenCells = new Map();
+  data.forEach(d => {
+    const rawKey = `${d.lat},${d.lon}`;
+    if (!seenCells.has(rawKey)) {
+      const lon = d.lon > 180 ? d.lon - 360 : d.lon;
+      const [px, py] = projection([lon, d.lat]) || [];
+      if (px != null && !isNaN(px))
+        seenCells.set(rawKey, { lat: d.lat, lon, rawKey, basin: getBasin(d.lat), px, py });
+    }
+  });
+  const cells = Array.from(seenCells.values());
+
+  const dotR = Math.max(3.6, Math.min(5.0, W / 220));
+
+  // Main map SVG — viewBox will be animated to zoom into each region
+  const svg = d3.select('#viz-depth-sticky').append('svg')
+    .attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('class', 'viz-svg depth-map-svg')
+    .style('display', 'block');
+
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#010a14');
+
+  const graticulePath = svg.append('path')
+    .datum(d3.geoGraticule().step([30, 30])())
+    .attr('d', geoPath).attr('fill', 'none')
+    .attr('stroke', '#0a2540').attr('stroke-width', 0.45).attr('opacity', 0.35);
+
+  const dots = svg.append('g')
+    .selectAll('.depth-map-dot')
+    .data(cells).enter().append('circle')
+    .attr('class', 'depth-map-dot')
+    .attr('cx', d => d.px).attr('cy', d => d.py)
+    .attr('r', dotR)
+    .attr('fill', d => {
+      const ph = cellYearPH.get(d.rawKey)?.get(1850);
+      return ph != null ? phColor(ph) : '#444';
+    })
+    .attr('opacity', 0.82);
+
+  svg.append('path').datum(countries)
+    .attr('d', geoPath)
+    .attr('fill', '#0f1a24').attr('stroke', '#1a3a52')
+    .attr('stroke-width', 0.45).attr('opacity', 0.96)
+    .style('pointer-events', 'none');
+
+  // ── Overlaid year label (HTML over SVG, unaffected by viewBox zoom) ───────
+  const yearLabel = document.createElement('div');
+  yearLabel.className = 'depth-year-label';
+  container.appendChild(yearLabel);
+
+  // ── Inset trend chart (separate absolutely-positioned SVG) ────────────────
+  const iW = 230, iH = 132;
+  const iM = { top: 26, right: 14, bottom: 22, left: 44 };
+  const iiW = iW - iM.left - iM.right;
+  const iiH = iH - iM.top - iM.bottom;
+
+  const mainSeries = allExplorerSeries.filter(s => REGION_ORDER.includes(s.basin));
+  const allVals    = mainSeries.flatMap(s => s.values);
+  const xIns = d3.scaleLinear().domain([1850, 2014]).range([0, iiW]);
+  const yIns = d3.scaleLinear()
+    .domain([d3.min(allVals, d => d.ph) - 0.004, d3.max(allVals, d => d.ph) + 0.004])
+    .range([iiH, 0]);
+  const lineGen = d3.line().x(d => xIns(d.year)).y(d => yIns(d.ph)).curve(d3.curveCatmullRom);
+
+  const insetSvg = d3.select('#viz-depth-sticky').append('svg')
+    .attr('width', iW).attr('height', iH)
+    .style('position', 'absolute').style('bottom', '12px').style('right', '12px')
+    .style('pointer-events', 'none');
+
+  insetSvg.append('rect').attr('width', iW).attr('height', iH).attr('rx', 7)
+    .attr('fill', 'rgba(2,13,26,0.88)')
+    .attr('stroke', 'rgba(0,180,216,0.22)').attr('stroke-width', 1);
+
+  const insetG = insetSvg.append('g').attr('transform', `translate(${iM.left},${iM.top})`);
+
+  insetG.append('g').attr('transform', `translate(0,${iiH})`)
+    .call(d3.axisBottom(xIns).ticks(4).tickFormat(d3.format('d')))
+    .call(g => { g.select('.domain').attr('stroke','#0e2a3d'); g.selectAll('text').attr('fill','#7fb3c8').style('font-size','8px'); });
+  insetG.append('g')
+    .call(d3.axisLeft(yIns).ticks(4).tickFormat(d3.format('.3f')))
+    .call(g => { g.select('.domain').attr('stroke','#0e2a3d'); g.selectAll('text').attr('fill','#7fb3c8').style('font-size','8px'); });
+
+  const insetTitle = insetSvg.append('text')
+    .attr('x', iW / 2).attr('y', 14).attr('text-anchor', 'middle')
+    .style('font-size', '9.5px').style('font-weight', '700').attr('fill', '#90e0ef');
+
+  const insetLine = insetG.append('path')
+    .attr('fill', 'none').attr('stroke-width', 2).attr('opacity', 0);
+
+  // Playhead: vertical rule + dot + label
+  const playhead = insetG.append('g').attr('opacity', 0);
+  playhead.append('line').attr('class', 'ph-rule')
+    .attr('y1', 0).attr('y2', iiH)
+    .attr('stroke', '#90e0ef').attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,3').attr('opacity', 0.75);
+  const phDot = playhead.append('circle').attr('r', 3.5).attr('fill', '#90e0ef');
+  const phLabel = playhead.append('text')
+    .attr('text-anchor', 'middle').attr('fill', '#90e0ef').style('font-size', '8px');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let activeBasin = null;
+  let lastYear    = -1;
+
+  // ── updateMapToYear ───────────────────────────────────────────────────────
+  function updateMapToYear(year) {
+    if (year === lastYear) return;
+    lastYear = year;
+    yearLabel.textContent = year;
+
+    // Recolor only the active region's dots (others stay static)
+    dots.filter(d => d.basin === activeBasin)
+      .attr('fill', d => {
+        const ph = cellYearPH.get(d.rawKey)?.get(year);
+        return ph != null ? phColor(ph) : '#444';
+      });
+
+    // Move playhead
+    const px = xIns(year);
+    playhead.select('.ph-rule').attr('x1', px).attr('x2', px);
+
+    const activeSeries = allExplorerSeries.find(s => s.basin === activeBasin);
+    if (activeSeries) {
+      const pt = activeSeries.values.find(v => v.year === year);
+      if (pt) {
+        phDot.attr('cx', px).attr('cy', yIns(pt.ph));
+        phLabel.attr('x', px).attr('y', -5).text(year);
+      }
+    }
+  }
+
+  // ── zoomToRegion: animate viewBox to fit the region's dots ───────────────
+  function zoomToRegion(basin) {
+    const regionCells = cells.filter(d => d.basin === basin);
+    if (!regionCells.length) return;
+
+    const x0 = d3.min(regionCells, d => d.px);
+    const x1 = d3.max(regionCells, d => d.px);
+    const y0 = d3.min(regionCells, d => d.py);
+    const y1 = d3.max(regionCells, d => d.py);
+
+    // Padding: more horizontal (continents extend past dots) than vertical
+    const padX = Math.max(28, (x1 - x0) * 0.04);
+    const padY = Math.max(28, (y1 - y0) * 0.18);
+
+    svg.transition().duration(750).ease(d3.easeCubicInOut)
+      .attr('viewBox', `${x0 - padX} ${y0 - padY} ${x1 - x0 + 2 * padX} ${y1 - y0 + 2 * padY}`);
+  }
+
+  function zoomToGlobal() {
+    svg.transition().duration(750).ease(d3.easeCubicInOut)
+      .attr('viewBox', `0 0 ${W} ${H}`);
+  }
+
+  // ── setActiveRegion ───────────────────────────────────────────────────────
+  function setActiveRegion(basin) {
+    // Resolve fine-grained bands to their parent for map zoom / dot highlight
+    const mapBasin = REGION_ORDER.includes(basin) ? basin
+      : basin === 'High Arctic' || basin === 'Subpolar' ? 'Arctic'
+      : basin === 'Deep Tropics' ? 'Tropical'
+      : basin;
+
+    activeBasin = mapBasin;
+    lastYear = -1;
+
+    const series = allExplorerSeries.find(s => s.basin === basin);
+    const color  = EXPLORER_REGION_COLORS[basin] || '#00b4d8';
+
+    // Zoom the viewBox
+    zoomToRegion(mapBasin);
+
+    // Dim non-region dots; colorize region dots to 1850 baseline
+    dots.interrupt()
+      .transition().duration(400)
+      .attr('opacity', d => d.basin === mapBasin ? 0.90 : 0.07)
+      .attr('r',       d => d.basin === mapBasin ? dotR * 1.1 : dotR * 0.7)
+      .attr('fill',    d => {
+        if (d.basin !== mapBasin) return '#334';
+        const ph = cellYearPH.get(d.rawKey)?.get(1850);
+        return ph != null ? phColor(ph) : '#444';
+      });
+
+    // Inset: draw this region's trend line
+    if (series) {
+      insetTitle.attr('fill', color).text(basin);
+      insetLine.attr('stroke', color).attr('d', lineGen(series.values))
+        .attr('stroke-dasharray', function() { const l = this.getTotalLength(); return `${l} ${l}`; })
+        .attr('stroke-dashoffset', function() { return this.getTotalLength(); })
+        .attr('opacity', 1)
+        .transition().duration(600).ease(d3.easeCubicInOut).attr('stroke-dashoffset', 0);
+    }
+
+    playhead.attr('opacity', 1);
+    updateMapToYear(1850);
+
+  }
+
+  // ── Scrollama ─────────────────────────────────────────────────────────────
+  const scroller = scrollama();
+  scroller
+    .setup({ step: '#scrollama-steps .step', offset: 0.5, progress: true })
+    .onStepEnter(({ element }) => {
+      document.querySelectorAll('#scrollama-steps .step').forEach(el => el.classList.remove('is-active'));
+      element.classList.add('is-active');
+      setActiveRegion(element.dataset.region);
+    })
+    .onStepProgress(({ progress }) => {
+      updateMapToYear(Math.round(1850 + progress * 164));
+    });
+
+  window.addEventListener('resize', scroller.resize);
+
+  // Default: activate first step
+  const firstStep = document.querySelector('#scrollama-steps .step');
+  if (firstStep) {
+    firstStep.classList.add('is-active');
+    setActiveRegion(firstStep.dataset.region);
+  }
+}
+
 // ── SCROLL OBSERVER ───────────────────────────────────────────────────────────
 
 function setupObserver() {
@@ -676,6 +934,9 @@ function setupObserver() {
       if (el.id === 'section-map' && !el._done) {
         el._done = true;
         setTimeout(() => el._animate?.(), 150);
+      }
+      if (el.id === 'section-depth' && !el._done) {
+        el._done = true;
       }
       if (el.id === 'section-stakes' && !el._done) {
         el._done = true;
