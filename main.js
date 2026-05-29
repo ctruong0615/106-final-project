@@ -130,6 +130,7 @@ Promise.all([
   renderGlobalTrend(globalByYear);
   renderRegionalChart(regionalSeries);
   renderDeltaMap(deltaData, worldTopo, regionalMap, data);
+  renderBeringChart(data, globalByYear);
   setupObserver();
 });
 
@@ -212,6 +213,108 @@ function renderGlobalTrend(data) {
       `<strong>${d.year}</strong><br>pH: ${d.ph.toFixed(4)}<br><span style="color:#ff4d6d">Δ from 1850: ${(d.ph - data[0].ph).toFixed(4)}</span>`))
     .on('mousemove', moveTooltip)
     .on('mouseout', hideTooltip);
+}
+
+// ── VIZ 1b: BERING SEA SPOTLIGHT ─────────────────────────────────────────────
+
+function renderBeringChart(rawData, globalByYear) {
+  const beringCells = rawData.filter(d => d.lat >= 55 && d.lat <= 65 && d.lon <= -155);
+  const beringByYear = Array.from(
+    d3.rollup(beringCells, v => d3.mean(v, d => d.ph), d => d.year),
+    ([year, ph]) => ({ year, ph })
+  ).sort((a, b) => a.year - b.year);
+
+  if (!beringByYear.length) return;
+
+  const el = document.getElementById('viz-bering');
+  const W  = el.clientWidth || 560;
+  const m  = { top: 28, right: 24, bottom: 44, left: 58 };
+  const iW = W - m.left - m.right;
+  const iH = 300 - m.top - m.bottom;
+
+  const svg = d3.select('#viz-bering').append('svg')
+    .attr('width', W).attr('height', iH + m.top + m.bottom)
+    .attr('class', 'viz-svg')
+    .append('g').attr('transform', `translate(${m.left},${m.top})`);
+
+  const allPh = [...beringByYear, ...globalByYear].map(d => d.ph);
+  const x = d3.scaleLinear().domain([1850, 2014]).range([0, iW]);
+  const y = d3.scaleLinear().domain([d3.min(allPh) - 0.005, d3.max(allPh) + 0.008]).range([iH, 0]);
+
+  // Grid
+  svg.append('g').call(d3.axisLeft(y).tickSize(-iW).tickFormat(''))
+    .selectAll('.tick line').attr('stroke', '#0e2a3d').attr('stroke-dasharray', '3,4');
+  svg.select('.domain').remove();
+
+  // Axes
+  svg.append('g').attr('transform', `translate(0,${iH})`)
+    .call(d3.axisBottom(x).tickFormat(d3.format('d')).ticks(8))
+    .call(g => { g.select('.domain').attr('stroke','#0e2a3d'); g.selectAll('text').attr('fill','#7fb3c8'); });
+  svg.append('g').call(d3.axisLeft(y).ticks(6).tickFormat(d3.format('.3f')))
+    .call(g => { g.select('.domain').attr('stroke','#0e2a3d'); g.selectAll('text').attr('fill','#7fb3c8'); });
+
+  svg.append('text').attr('transform','rotate(-90)').attr('x',-iH/2).attr('y',-m.left+14)
+    .attr('text-anchor','middle').attr('fill','#7fb3c8').style('font-size','11px').text('Sea Surface pH');
+
+  // 1850 baseline
+  const baseline1850 = beringByYear[0].ph;
+  svg.append('line')
+    .attr('x1', 0).attr('x2', iW)
+    .attr('y1', y(baseline1850)).attr('y2', y(baseline1850))
+    .attr('stroke', '#f4a261').attr('stroke-width', 1.5).attr('stroke-dasharray', '6,4').attr('opacity', 0.8);
+  svg.append('text')
+    .attr('x', iW - 4).attr('y', y(baseline1850) - 7)
+    .attr('text-anchor', 'end').attr('fill', '#f4a261').style('font-size', '11px')
+    .text(`1850 baseline (${baseline1850.toFixed(3)})`);
+
+  // Global mean reference line
+  svg.append('path').datum(globalByYear)
+    .attr('fill', 'none').attr('stroke', '#7fb3c8').attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '5,4').attr('opacity', 0.4)
+    .attr('d', d3.line().x(d => x(d.year)).y(d => y(d.ph)).curve(d3.curveCatmullRom));
+  svg.append('text')
+    .attr('x', 6).attr('y', y(globalByYear[0].ph) - 7)
+    .attr('fill', '#7fb3c8').style('font-size', '10px').attr('opacity', 0.6)
+    .text('Global mean');
+
+  // Annotation ticks
+  const annotations = [
+    { year: 1950, label: 'Post-war growth' },
+    { year: 1984, label: 'Rapid acceleration' },
+    { year: 2014, label: '−0.15 from 1850' },
+  ];
+  const byYearMap = new Map(beringByYear.map(d => [d.year, d.ph]));
+  annotations.forEach(({ year, label }) => {
+    const cx = x(year);
+    const ph = byYearMap.get(year);
+    if (ph == null) return;
+    svg.append('line')
+      .attr('x1', cx).attr('x2', cx)
+      .attr('y1', y(ph) - 4).attr('y2', iH)
+      .attr('stroke', '#ff4d6d').attr('stroke-width', 1)
+      .attr('stroke-dasharray', '3,3').attr('opacity', 0.45);
+    svg.append('text')
+      .attr('x', cx).attr('y', y(ph) - 8)
+      .attr('text-anchor', 'middle').attr('fill', '#ff4d6d').style('font-size', '9px')
+      .text(label);
+  });
+
+  // Bering Sea line — animated on scroll
+  const linePath = svg.append('path').datum(beringByYear)
+    .attr('fill', 'none').attr('stroke', '#00b4d8').attr('stroke-width', 2.5)
+    .attr('d', d3.line().x(d => x(d.year)).y(d => y(d.ph)).curve(d3.curveCatmullRom));
+
+  const len = linePath.node().getTotalLength();
+  linePath.attr('stroke-dasharray', `${len} ${len}`).attr('stroke-dashoffset', len);
+
+  // Deficit shading
+  svg.append('path').datum(beringByYear)
+    .attr('fill', '#ff4d6d').attr('opacity', 0.08)
+    .attr('d', d3.area().x(d => x(d.year)).y0(y(baseline1850)).y1(d => y(d.ph)).curve(d3.curveCatmullRom));
+
+  document.getElementById('section-human')._animate = () => {
+    linePath.transition().duration(2200).ease(d3.easeCubicInOut).attr('stroke-dashoffset', 0);
+  };
 }
 
 // ── VIZ 2: REGIONAL DIVERGENCE ────────────────────────────────────────────────
@@ -762,6 +865,10 @@ function setupObserver() {
         document.querySelectorAll('.stake-card').forEach((card, i) => {
           setTimeout(() => card.classList.add('visible'), i * 160);
         });
+      }
+      if (el.id === 'section-human' && !el._done) {
+        el._done = true;
+        setTimeout(() => el._animate?.(), 300);
       }
 
       observer.unobserve(el);

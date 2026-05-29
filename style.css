@@ -650,3 +650,18 @@ body {
   min-width: 4ch;
 }
 
+/* ── HUMAN IMPACT SECTION ──────────────────────────── */
+#section-human {
+  background: var(--deep);
+}
+
+.human-citation {
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.6;
+  line-height: 1.6;
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--grid);
+  padding-top: 0.75rem;
+}
+
