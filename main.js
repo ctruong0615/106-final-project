@@ -129,6 +129,7 @@ Promise.all([
 
   renderGlobalTrend(globalByYear);
   renderRegionalChart(regionalSeries);
+  renderAcidificationGuess(regionalSeries);
   renderDeltaMap(deltaData, worldTopo, regionalMap, data);
   renderBeringChart(data, globalByYear);
   setupObserver();
@@ -483,12 +484,12 @@ function renderRegionalChart(series) {
 function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
   const container = document.getElementById('viz-map');
   const W = Math.min(container.parentElement.clientWidth || window.innerWidth * 0.9, 1180);
-  const H = Math.round(W * 0.80);
+  const H = Math.round(W * 0.90);
 
   const projection = d3.geoAzimuthalEqualArea()
-    .rotate([0, -90])
+    .rotate([180, -57])
     .clipAngle(33)
-    .scale(W * 0.68)
+    .scale(W * 0.75)
     .translate([W / 2, H / 2]);
 
   const path = d3.geoPath().projection(projection);
@@ -514,9 +515,10 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
     .attr('stroke-width', 0.45)
     .attr('opacity', 0.4);
 
-  const arcticMin = d3.min(deltaData.filter(d => d.lat >= 60), d => d.delta);
+  const sortedDeltas = deltaData.map(d => d.delta).sort((a, b) => a - b);
+  const stretchedMin = d3.quantile(sortedDeltas, 0.03);
   const bandColorScale = d3.scaleSequential()
-    .domain([0, arcticMin])
+    .domain([0, stretchedMin])
     .interpolator(t => d3.interpolateRdYlBu(1 - t))
     .clamp(true);
 
@@ -531,9 +533,9 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
     cellYearPH.get(key).set(d.year, d.ph);
   });
 
-  // Project each 5° Arctic cell to pixel coords (lat >= 60 only)
-  const dotR = Math.max(5.0, Math.min(8.5, W / 130));
-  const cells = deltaData.filter(d => d.lat >= 60).map(d => {
+  // Project all ocean cells — projection clipAngle handles visible extent
+  const dotR = Math.max(4.5, Math.min(7.5, W / 145));
+  const cells = deltaData.map(d => {
     const lon = d.lon > 180 ? d.lon - 360 : d.lon;
     const proj = projection([lon, d.lat]);
     return { ...d, px: proj?.[0], py: proj?.[1], basin: getBasin(d.lat), key: `${d.lat},${d.lon}` };
@@ -572,9 +574,8 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
     sliderEl.style.background = `linear-gradient(to right, var(--teal) ${pct}%, #0e2a3d ${pct}%)`;
   }
 
-  // Cross-link with Viz 2 regional chart hover (Arctic-only map — ignore non-Arctic focus)
+  // Cross-link with Viz 2 regional chart hover
   updateMapRegionFocus = basin => {
-    if (basin && basin !== 'Arctic') return;
     dots
       .attr('opacity', d => !basin || d.basin === basin ? 0.90 : 0.10)
       .attr('r', d => basin && d.basin === basin ? dotR * 1.2 : dotR * 0.75);
@@ -682,7 +683,7 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
     .style('max-width', W + 'px')
     .style('margin', '0 auto');
 
-  renderMapLegend(0, arcticMin, bandColorScale);
+  renderMapLegend(0, stretchedMin, bandColorScale);
   renderMapNotes();
   document.getElementById('section-map').appendChild(brushPanel);
 }
@@ -692,16 +693,16 @@ function renderMapNotes() {
 
   const notes = [
     {
-      title: 'Arctic leads in acidification',
-      text: 'Cold Arctic waters dissolve CO₂ more readily than warmer seas, making the Arctic the most rapidly acidifying ocean region on Earth.'
+      title: 'The Bering Sea stands out',
+      text: 'With the Bering Sea centered, the contrast is clear: the blue tropics in the lower half of the map have barely moved, while the reds cluster in the upper latitudes — the Bering Sea among the deepest.'
     },
     {
-      title: 'Spatial variation within the Arctic',
-      text: 'Cells near sea-ice edges and Arctic river inflows show the steepest declines — the reddest dots mark where chemistry is changing fastest.'
+      title: 'Cold water, faster change',
+      text: 'The same physics that make the Bering Sea a world-class fishery — cold, nutrient-rich water — also make it absorb CO₂ faster, driving steeper acidification than warmer tropical seas.'
     },
     {
-      title: 'Drag the slider to see change',
-      text: 'The map starts at the 1850 baseline — all blue. Drag right toward 2014 to watch the Arctic Ocean redden as pH drops steadily.'
+      title: 'Drag the slider to compare over time',
+      text: 'Start at 1850 — all blue. Drag right to 2014 and watch the Bering Sea and Arctic redden while the tropics remain relatively stable.'
     }
   ];
 
@@ -837,6 +838,78 @@ function renderMapLegend(lessChange, mostAcidified, colorScale) {
     .attr('fill', '#7fb3c8')
     .style('font-size', '10px')
     .text(mostAcidified.toFixed(3));
+}
+
+// ── ACIDITY GUESS WIDGET ──────────────────────────────────────────────────────
+
+function renderAcidificationGuess(regionalSeries) {
+  const arcticSeries   = regionalSeries.find(s => s.basin === 'Arctic');
+  const tropicalSeries = regionalSeries.find(s => s.basin === 'Tropical');
+  const widget = document.getElementById('acidity-guess-widget');
+  if (!arcticSeries || !tropicalSeries || !widget) return;
+
+  const arcticFirst = arcticSeries.values[0];
+  const arcticLast  = arcticSeries.values[arcticSeries.values.length - 1];
+  const arcticDrop  = arcticFirst.ph - arcticLast.ph;
+
+  const tropFirst = tropicalSeries.values[0];
+  const tropLast  = tropicalSeries.values[tropicalSeries.values.length - 1];
+  const tropDrop  = tropFirst.ph - tropLast.ph;
+
+  const arcticAcidPct = (Math.pow(10, arcticDrop) - 1) * 100;
+  const tropAcidPct   = (Math.pow(10, tropDrop)   - 1) * 100;
+  const actualRatio   = arcticAcidPct / tropAcidPct;
+
+  widget.innerHTML = `
+    <p class="guess-question">How many times more acidic has the Arctic become compared to the Tropics?</p>
+    <p class="guess-hint">Arctic dropped <strong class="guess-hl">${arcticDrop.toFixed(2)} pH units</strong> · Tropics dropped <strong class="guess-hl">${tropDrop.toFixed(2)} pH units</strong>. The pH scale is logarithmic — these don't scale the same way.</p>
+    <div class="guess-input-row">
+      <input type="number" id="guess-input" min="1" max="99" step="0.1" placeholder="e.g. 2.5">
+      <span class="guess-times-label">×</span>
+      <button id="guess-reveal-btn" class="guess-btn">Reveal the answer</button>
+    </div>
+    <div id="guess-result" class="guess-result"></div>
+  `;
+
+  const input = widget.querySelector('#guess-input');
+  const btn   = widget.querySelector('#guess-reveal-btn');
+  const result = widget.querySelector('#guess-result');
+
+  btn.addEventListener('click', () => {
+    const guess = parseFloat(input.value);
+    if (isNaN(guess) || guess <= 0) { input.classList.add('guess-input-error'); return; }
+    input.classList.remove('guess-input-error');
+    btn.disabled = true;
+    input.disabled = true;
+    btn.textContent = 'Answer revealed';
+    const close = Math.abs(guess - actualRatio) <= 0.5;
+    const feedback = close
+      ? ''
+      : guess < actualRatio
+        ? ''
+        : '';
+
+    const arcticBarW = 100;
+    const tropBarW   = Math.round((tropAcidPct / arcticAcidPct) * 100);
+
+    result.innerHTML = `
+      <div class="guess-bars">
+        <div class="guess-bar-row">
+          <span class="guess-bar-label">Arctic</span>
+          <div class="guess-bar" style="width:${arcticBarW}%; background:var(--red)"></div>
+          <span class="guess-bar-val">${arcticAcidPct.toFixed(0)}% more acidic</span>
+        </div>
+        <div class="guess-bar-row">
+          <span class="guess-bar-label">Tropics</span>
+          <div class="guess-bar" style="width:${tropBarW}%; background:var(--teal)"></div>
+          <span class="guess-bar-val">${tropAcidPct.toFixed(0)}% more acidic</span>
+        </div>
+      </div>
+      <p class="guess-answer-line">The Arctic has acidified <strong class="guess-hl-red">${actualRatio.toFixed(1)}×</strong> as much as the Tropics — your guess was <strong>${guess.toFixed(1)}×</strong>. ${feedback}</p>
+      <p class="guess-explain">A ${arcticDrop.toFixed(2)} pH drop means H⁺ concentration rose by ${arcticAcidPct.toFixed(0)}%. The tropical ${tropDrop.toFixed(2)} drop means only ${tropAcidPct.toFixed(0)}%. Because pH is a base-10 log scale, that extra ${(arcticDrop - tropDrop).toFixed(2)} pH units compounds into a far bigger jump in actual acidity than it looks on the chart.</p>
+    `;
+    result.classList.add('guess-result-visible');
+  });
 }
 
 // ── SCROLL OBSERVER ───────────────────────────────────────────────────────────
