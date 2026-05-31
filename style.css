@@ -678,48 +678,66 @@ body {
 .guess-hl  { color: var(--glow); }
 .guess-hl-red { color: var(--red); }
 
-.guess-input-row {
+.guess-two-inputs {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  gap: 1.25rem;
   margin-bottom: 0.9rem;
+  flex-wrap: wrap;
 }
 
-#guess-input {
-  width: 6rem;
+.guess-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.guess-field-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.guess-field-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.guess-field-input-row input[type="number"] {
+  width: 5.5rem;
   background: var(--deep);
   border: 1px solid rgba(0, 180, 216, 0.4);
   border-radius: 6px;
   color: var(--teal);
   font-family: 'Playfair Display', serif;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   padding: 0.3rem 0.6rem;
   outline: none;
   transition: border-color 0.15s;
   -moz-appearance: textfield;
 }
 
-#guess-input::-webkit-outer-spin-button,
-#guess-input::-webkit-inner-spin-button {
+.guess-field-input-row input[type="number"]::-webkit-outer-spin-button,
+.guess-field-input-row input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
 
-#guess-input:focus {
+.guess-field-input-row input[type="number"]:focus {
   border-color: var(--teal);
 }
 
-#guess-input.guess-input-error {
+.guess-field-input-row input[type="number"].guess-input-error {
   border-color: var(--red);
 }
 
-#guess-input:disabled {
+.guess-field-input-row input[type="number"]:disabled {
   opacity: 0.5;
 }
 
-.guess-times-label {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.2rem;
-  color: var(--teal);
+.guess-pct-label {
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .guess-btn {
@@ -778,6 +796,13 @@ body {
   min-width: 4.5rem;
 }
 
+.guess-bar-track {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
 .guess-bar {
   height: 10px;
   border-radius: 3px;
@@ -788,6 +813,11 @@ body {
   font-size: 0.75rem;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.guess-your-val {
+  opacity: 0.55;
+  font-size: 0.72rem;
 }
 
 .guess-answer-line {

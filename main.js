@@ -858,55 +858,70 @@ function renderAcidificationGuess(regionalSeries) {
 
   const arcticAcidPct = (Math.pow(10, arcticDrop) - 1) * 100;
   const tropAcidPct   = (Math.pow(10, tropDrop)   - 1) * 100;
-  const actualRatio   = arcticAcidPct / tropAcidPct;
 
   widget.innerHTML = `
-    <p class="guess-question">How many times more acidic has the Arctic become compared to the Tropics?</p>
-    <p class="guess-hint">Arctic dropped <strong class="guess-hl">${arcticDrop.toFixed(2)} pH units</strong> · Tropics dropped <strong class="guess-hl">${tropDrop.toFixed(2)} pH units</strong>. The pH scale is logarithmic — these don't scale the same way.</p>
-    <div class="guess-input-row">
-      <input type="number" id="guess-input" min="1" max="99" step="0.1" placeholder="e.g. 2.5">
-      <span class="guess-times-label">×</span>
-      <button id="guess-reveal-btn" class="guess-btn">Reveal the answer</button>
+    <p class="guess-question">Since 1850, how much more acidic has each region become?</p>
+    <p class="guess-hint">Arctic dropped <strong class="guess-hl">${arcticDrop.toFixed(2)} pH units</strong> · Tropics dropped <strong class="guess-hl">${tropDrop.toFixed(2)} pH units</strong>. Enter your best guess for each.</p>
+    <div class="guess-two-inputs">
+      <div class="guess-field">
+        <label class="guess-field-label" style="color:var(--red)">Arctic</label>
+        <div class="guess-field-input-row">
+          <input type="number" id="guess-arctic" min="0" max="999" step="1" placeholder="?">
+          <span class="guess-pct-label">% more acidic</span>
+        </div>
+      </div>
+      <div class="guess-field">
+        <label class="guess-field-label" style="color:var(--teal)">Tropics</label>
+        <div class="guess-field-input-row">
+          <input type="number" id="guess-trop" min="0" max="999" step="1" placeholder="?">
+          <span class="guess-pct-label">% more acidic</span>
+        </div>
+      </div>
     </div>
+    <button id="guess-reveal-btn" class="guess-btn">Reveal the answer</button>
     <div id="guess-result" class="guess-result"></div>
   `;
 
-  const input = widget.querySelector('#guess-input');
-  const btn   = widget.querySelector('#guess-reveal-btn');
-  const result = widget.querySelector('#guess-result');
+  const inputArctic = widget.querySelector('#guess-arctic');
+  const inputTrop   = widget.querySelector('#guess-trop');
+  const btn         = widget.querySelector('#guess-reveal-btn');
+  const result      = widget.querySelector('#guess-result');
 
   btn.addEventListener('click', () => {
-    const guess = parseFloat(input.value);
-    if (isNaN(guess) || guess <= 0) { input.classList.add('guess-input-error'); return; }
-    input.classList.remove('guess-input-error');
-    btn.disabled = true;
-    input.disabled = true;
-    btn.textContent = 'Answer revealed';
-    const close = Math.abs(guess - actualRatio) <= 0.5;
-    const feedback = close
-      ? ''
-      : guess < actualRatio
-        ? ''
-        : '';
+    const guessArctic = parseFloat(inputArctic.value);
+    const guessTrop   = parseFloat(inputTrop.value);
+    let invalid = false;
+    if (isNaN(guessArctic) || guessArctic < 0) { inputArctic.classList.add('guess-input-error'); invalid = true; } else inputArctic.classList.remove('guess-input-error');
+    if (isNaN(guessTrop)   || guessTrop   < 0) { inputTrop.classList.add('guess-input-error');   invalid = true; } else inputTrop.classList.remove('guess-input-error');
+    if (invalid) return;
 
-    const arcticBarW = 100;
-    const tropBarW   = Math.round((tropAcidPct / arcticAcidPct) * 100);
+    btn.disabled = true;
+    inputArctic.disabled = true;
+    inputTrop.disabled = true;
+    btn.textContent = 'Answer revealed';
+
+    const maxPct     = Math.max(arcticAcidPct, tropAcidPct);
+    const arcticBarW = Math.round((arcticAcidPct / maxPct) * 100);
+    const tropBarW   = Math.round((tropAcidPct   / maxPct) * 100);
 
     result.innerHTML = `
       <div class="guess-bars">
         <div class="guess-bar-row">
-          <span class="guess-bar-label">Arctic</span>
-          <div class="guess-bar" style="width:${arcticBarW}%; background:var(--red)"></div>
-          <span class="guess-bar-val">${arcticAcidPct.toFixed(0)}% more acidic</span>
+          <span class="guess-bar-label" style="color:var(--red)">Arctic</span>
+          <div class="guess-bar-track">
+            <div class="guess-bar" style="width:${arcticBarW}%; background:var(--red)"></div>
+          </div>
+          <span class="guess-bar-val"><span class="guess-hl-red">${arcticAcidPct.toFixed(0)}%</span> <span class="guess-your-val">(you: ${guessArctic.toFixed(0)}%)</span></span>
         </div>
         <div class="guess-bar-row">
-          <span class="guess-bar-label">Tropics</span>
-          <div class="guess-bar" style="width:${tropBarW}%; background:var(--teal)"></div>
-          <span class="guess-bar-val">${tropAcidPct.toFixed(0)}% more acidic</span>
+          <span class="guess-bar-label" style="color:var(--teal)">Tropics</span>
+          <div class="guess-bar-track">
+            <div class="guess-bar" style="width:${tropBarW}%; background:var(--teal)"></div>
+          </div>
+          <span class="guess-bar-val"><span class="guess-hl">${tropAcidPct.toFixed(0)}%</span> <span class="guess-your-val">(you: ${guessTrop.toFixed(0)}%)</span></span>
         </div>
       </div>
-      <p class="guess-answer-line">The Arctic has acidified <strong class="guess-hl-red">${actualRatio.toFixed(1)}×</strong> as much as the Tropics — your guess was <strong>${guess.toFixed(1)}×</strong>. ${feedback}</p>
-      <p class="guess-explain">A ${arcticDrop.toFixed(2)} pH drop means H⁺ concentration rose by ${arcticAcidPct.toFixed(0)}%. The tropical ${tropDrop.toFixed(2)} drop means only ${tropAcidPct.toFixed(0)}%. Because pH is a base-10 log scale, that extra ${(arcticDrop - tropDrop).toFixed(2)} pH units compounds into a far bigger jump in actual acidity than it looks on the chart.</p>
+      <p class="guess-explain">A pH drop of ${arcticDrop.toFixed(2)} means H⁺ concentration multiplied by 10<sup>${arcticDrop.toFixed(2)}</sup> = ${Math.pow(10, arcticDrop).toFixed(2)}×, a ${arcticAcidPct.toFixed(0)}% increase. The tropical ${tropDrop.toFixed(2)} drop gives 10<sup>${tropDrop.toFixed(2)}</sup> = ${Math.pow(10, tropDrop).toFixed(2)}×, or ${tropAcidPct.toFixed(0)}%. Because pH is a base-10 log scale, the actual acidity jump is always much larger than the pH number suggests.</p>
     `;
     result.classList.add('guess-result-visible');
   });
