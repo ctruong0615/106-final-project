@@ -132,6 +132,7 @@ Promise.all([
   renderAcidificationGuess(regionalSeries);
   renderDeltaMap(deltaData, worldTopo, regionalMap, data);
   renderBeringChart(data, globalByYear);
+  renderEcologicalDomino();
   setupObserver();
 });
 
@@ -964,4 +965,219 @@ function setupObserver() {
   }, { threshold: 0.12 });
 
   document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+}
+
+// ── VIZ 4: CLEAN STRIC-INTERACTION ECOLOGICAL DOMINO (SECTION 4) ─────────────
+
+function renderEcologicalDomino() {
+  const container = document.getElementById('viz-domino');
+  if (!container) return;
+
+  const W = container.clientWidth || 800;
+  const H = 460;
+
+  d3.select('#viz-domino').selectAll('*').remove();
+
+  const svg = d3.select('#viz-domino').append('svg')
+    .attr('width', W)
+    .attr('height', H)
+    .attr('class', 'viz-svg');
+
+  // Grounded Diamond Pyramid Layout
+  const data = {
+    nodes: [
+      { id: 'ph',        label: '📉 Drop in Ocean pH',       x: W * 0.10, y: H * 0.50 },
+      
+      { id: 'shellfish', label: '🦪 Bivalves & Clams',       x: W * 0.36, y: H * 0.25 },
+      { id: 'walrus',    label: '🦭 Walrus Stocks',          x: W * 0.62, y: H * 0.25 },
+      
+      { id: 'pteropod',  label: '🐚 Pteropods',              x: W * 0.36, y: H * 0.75 },
+      { id: 'salmon',    label: '🐟 Salmon & Cod',           x: W * 0.62, y: H * 0.75 },
+      { id: 'polarbear', label: '🐻❄️ Polar Bears',          x: W * 0.84, y: H * 0.75 },
+      
+      { id: 'inuit',     label: '👥 Inuit Communities',      x: W * 0.88, y: H * 0.40 }
+    ],
+    links: [
+      { source: 'ph',        target: 'shellfish', stage: 1, type: 'curved' },
+      { source: 'ph',        target: 'pteropod',  stage: 1, type: 'curved' },
+      
+      { source: 'shellfish', target: 'walrus',    stage: 2, type: 'straight' },
+      { source: 'pteropod',  target: 'salmon',    stage: 2, type: 'straight' },
+      
+      { source: 'salmon',    target: 'polarbear', stage: 3, type: 'straight' },
+      
+      { source: 'walrus',    target: 'inuit',     stage: 4, type: 'straight' },
+      { source: 'salmon',    target: 'inuit',     stage: 4, type: 'straight' },
+      { source: 'polarbear', target: 'inuit',     stage: 4, type: 'straight' }
+    ]
+  };
+
+  const nodeMap = new Map(data.nodes.map(n => [n.id, n]));
+  data.links.forEach(l => {
+    l.sourceNode = nodeMap.get(l.source);
+    l.targetNode = nodeMap.get(l.target);
+  });
+
+  // Dynamic Multipoint Routing Path Generator (Cleaned up Polar Bear source)
+  const pathGenerator = (d) => {
+    const sX = d.sourceNode.x + 75; // Right edge of source card
+    const sY = d.sourceNode.y;
+    
+    let tX = d.targetNode.x - 75; // Left edge of target card
+    let tY = d.targetNode.y;
+
+    if (d.target === 'inuit') {
+      if (d.source === 'walrus') {
+        // Route from right side of walrus into the TOP of the Inuit card
+        const targetTopX = d.targetNode.x;
+        const targetTopY = d.targetNode.y - 18;
+        return `M ${sX} ${sY} C ${(sX + targetTopX)/2} ${sY}, ${targetTopX} ${(sY + targetTopY)/2}, ${targetTopX} ${targetTopY}`;
+      }
+      
+      if (d.source === 'polarbear') {
+        // START FROM TOP-CENTER OF BEAR CARD, shoot up-right into BOTTOM of Inuit card
+        const sourceTopCenterX = d.sourceNode.x;
+        const sourceTopCenterY = d.sourceNode.y - 18;
+        const targetBotX = d.targetNode.x;
+        const targetBotY = d.targetNode.y + 18;
+        
+        // Clean straight-ish diagonal line moving forward and up
+        return `M ${sourceTopCenterX} ${sourceTopCenterY} L ${targetBotX} ${targetBotY}`;
+      }
+      
+      if (d.source === 'salmon') {
+        // Salmon shoots straight and arcs cleanly into the left-center of Inuit
+        return `M ${sX} ${sY} C ${(sX + tX)/2} ${sY}, ${(sX + tX)/2} ${tY}, ${tX} ${tY}`;
+      }
+    }
+
+    // Default smooth curve layout for the initial columns splitting out
+    if (d.type === 'curved') {
+      return `M ${sX} ${sY} C ${(sX + tX) / 2} ${sY}, ${(sX + tX) / 2} ${tY}, ${tX} ${tY}`;
+    } else {
+      return `M ${sX} ${sY} L ${tX} ${tY}`;
+    }
+  };
+
+  // Render Defs
+  const defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'domino-arrow-normal').attr('viewBox', '0 -5 10 10').attr('refX', 6).attr('refY', 0)
+    .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-4L10,0L0,4').attr('fill', '#0e2a3d');
+
+  defs.append('marker')
+    .attr('id', 'domino-arrow-active').attr('viewBox', '0 -5 10 10').attr('refX', 6).attr('refY', 0)
+    .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-4L10,0L0,4').attr('fill', '#ff4d6d');
+
+  // Render Connector paths using hybrid generator
+  const links = svg.append('g').selectAll('.domino-link')
+    .data(data.links).enter().append('path')
+    .attr('class', 'domino-link')
+    .attr('d', pathGenerator)
+    .attr('fill', 'none')
+    .attr('stroke', '#0e2a3d')
+    .attr('stroke-width', 2)
+    .attr('marker-end', 'url(#domino-arrow-normal)');
+
+  // Draw Container Badges
+  const nodes = svg.append('g').selectAll('.domino-node')
+    .data(data.nodes).enter().append('g')
+    .attr('class', 'domino-node')
+    .attr('transform', d => `translate(${d.x},${d.y})`);
+
+  nodes.append('rect')
+    .attr('x', -75)
+    .attr('y', -18)
+    .attr('width', 150)
+    .attr('height', 36)
+    .attr('rx', 6)
+    .attr('fill', '#0a2540')
+    .attr('stroke', '#1a3a52')
+    .attr('stroke-width', 1.5);
+
+  nodes.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', 5)
+    .attr('fill', '#7fb3c8')
+    .style('font-size', '11px')
+    .style('font-weight', '500')
+    .style('pointer-events', 'none')
+    .text(d => d.label);
+
+  function runStrictStage(stageNum) {
+    d3.selectAll('.console-btn').classed('active', false);
+    d3.select(`#btn-stage-${stageNum}`).classed('active', true);
+
+    // Filter Visibility based on strict stage logic
+    links.transition().duration(400)
+      .style('opacity', d => d.stage <= stageNum ? 1 : 0)
+      .attr('stroke', d => d.stage <= stageNum ? '#ff4d6d' : '#0e2a3d')
+      .attr('stroke-width', d => d.stage === stageNum ? 3 : 2)
+      .attr('marker-end', d => d.stage <= stageNum ? 'url(#domino-arrow-active)' : 'url(#domino-arrow-normal)');
+
+    nodes.select('rect').transition().duration(400)
+      .attr('fill', d => {
+        if (d.id === 'ph') return '#01162b';
+        if (stageNum >= 1 && (d.id === 'shellfish' || d.id === 'pteropod')) return '#1c0f1a';
+        if (stageNum >= 2 && (d.id === 'walrus' || d.id === 'salmon')) return '#1c0f1a';
+        if (stageNum >= 3 && d.id === 'polarbear') return '#1c0f1a';
+        if (stageNum >= 4 && d.id === 'inuit') return '#2b0c10';
+        return '#0a2540';
+      })
+      .attr('stroke', d => {
+        if (d.id === 'ph') return '#00b4d8';
+        if (stageNum >= 1 && (d.id === 'shellfish' || d.id === 'pteropod')) return '#ff4d6d';
+        if (stageNum >= 2 && (d.id === 'walrus' || d.id === 'salmon')) return '#ff4d6d';
+        if (stageNum >= 3 && d.id === 'polarbear') return '#ff4d6d';
+        if (stageNum >= 4 && d.id === 'inuit') return '#e63946';
+        return '#1a3a52';
+      })
+      .attr('stroke-width', d => {
+        if (d.id === 'ph') return 2;
+        if (stageNum === 1 && (d.id === 'shellfish' || d.id === 'pteropod')) return 2.5;
+        if (stageNum === 2 && (d.id === 'walrus' || d.id === 'salmon')) return 2.5;
+        if (stageNum === 3 && d.id === 'polarbear') return 2.5;
+        if (stageNum === 4 && d.id === 'inuit') return 3;
+        return 1.5;
+      });
+
+    nodes.select('text').transition().duration(400)
+      .attr('fill', d => {
+        if (d.id === 'ph') return '#00b4d8';
+        if (stageNum >= 1 && (d.id === 'shellfish' || d.id === 'pteropod')) return '#ff4d6d';
+        if (stageNum >= 2 && (d.id === 'walrus' || d.id === 'salmon')) return '#ff4d6d';
+        if (stageNum >= 3 && d.id === 'polarbear') return '#ff4d6d';
+        if (stageNum >= 4 && d.id === 'inuit') return '#e63946';
+        return '#7fb3c8';
+      })
+      .style('font-weight', d => {
+        if (d.id === 'ph') return '700';
+        if (stageNum === 1 && (d.id === 'shellfish' || d.id === 'pteropod')) return '700';
+        if (stageNum === 2 && (d.id === 'walrus' || d.id === 'salmon')) return '700';
+        if (stageNum === 3 && d.id === 'polarbear') return '700';
+        if (stageNum === 4 && d.id === 'inuit') return '700';
+        return '500';
+      });
+
+    const textTarget = document.getElementById('domino-stage-desc');
+    const descriptions = {
+      0: `Select a structural stage above to carefully track how ocean acidificatino systematically dismantles apex biological life for Inuit communities.`,
+      1: `<strong>Corrosive Thresholds Breached:</strong> High latitude cold waters absorb carbon at accelerated rates. As pH levels drop, structural calcifiers see shell composition dissolve, which instantly crushes the foundation of the food chain.`,
+      2: `<strong>Starvation Cascades Upward:</strong> Without bivalves, bottom-feeding walruses run out of food sources. Additionally, missing pteropod can instantly erase up to 60% of primary food resources for migrating salmon and Pacific cod.`,
+      3: `<strong>Apex Disruption:</strong> Without stable salmon and marine consumer patterns, apex predators like the Polar Bear lose reliable fat reserves, causing severe structural shifts in geographic migration patterns.`,
+      4: `<strong>The Human Threat:</strong> The domino model breaks landward. Inuit hunters lose reliable navigation safety and traditional targets. Marine food security drops sharply, creating immediate threats for modern cultural preservation.`
+    };
+    if (textTarget) textTarget.innerHTML = descriptions[stageNum];
+  }
+
+  for(let i=0; i<=4; i++) {
+    const btn = document.getElementById(`btn-stage-${i}`);
+    if(btn) {
+      btn.addEventListener('click', () => runStrictStage(i));
+    }
+  }
+
+  runStrictStage(0);
 }
