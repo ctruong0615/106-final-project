@@ -6,6 +6,7 @@ const REGION_COLORS = {
   'Tropical':        '#90e0ef',
   'S. Temperate':    '#48cae4',
   'Southern Ocean':  '#0077b6',
+  'Bering Sea':      '#ff6b00',
 };
 
 const REGION_ORDER = ['Arctic', 'N. Temperate', 'Tropical', 'S. Temperate', 'Southern Ocean'];
@@ -127,9 +128,17 @@ Promise.all([
     return { lat, lon, delta: r2014.ph - r1850.ph, ph1850: r1850.ph, ph2014: r2014.ph };
   }).filter(Boolean);
 
+  const beringCells = data.filter(d => d.lat >= 55 && d.lat <= 65 && d.lon <= -155);
+  const beringByYear = Array.from(
+    d3.rollup(beringCells, v => d3.mean(v, d => d.ph), d => d.year),
+    ([year, ph]) => ({ year, ph })
+  ).sort((a, b) => a.year - b.year);
+  const beringSeries = { basin: 'Bering Sea', values: beringByYear };
+  const allSeries = [...regionalSeries, beringSeries];
+
   renderGlobalTrend(globalByYear);
-  renderRegionalChart(regionalSeries);
-  renderAcidificationGuess(regionalSeries);
+  renderRegionalChart(allSeries);
+  renderAcidificationGuess(allSeries);
   renderDeltaMap(deltaData, worldTopo, regionalMap, data);
   renderBeringChart(data, globalByYear);
   renderEcologicalDomino();
@@ -391,8 +400,11 @@ function renderRegionalChart(series) {
 
   function focusRegionalChart(basin) {
     svg.selectAll('.regional-line')
-      .attr('opacity', d => !basin || d.basin === basin ? 1 : 0.16)
-      .attr('stroke-width', d => basin && d.basin === basin ? 3.3 : 2.2);
+      .attr('opacity', d => {
+        if (!basin) return d.basin === 'Bering Sea' ? 1.0 : 0.38;
+        return d.basin === basin ? 1 : 0.16;
+      })
+      .attr('stroke-width', d => basin && d.basin === basin ? 3.3 : (d.basin === 'Bering Sea' ? 2.8 : 2.2));
 
     svg.selectAll('.regional-label, .regional-label-line')
       .attr('opacity', d => !basin || d.basin === basin ? 1 : 0.18);
@@ -407,8 +419,8 @@ function renderRegionalChart(series) {
       .attr('class', 'regional-line')
       .attr('fill', 'none')
       .attr('stroke', REGION_COLORS[basin])
-      .attr('stroke-width', 2.2)
-      .attr('opacity', 0.9)
+      .attr('stroke-width', basin === 'Bering Sea' ? 2.8 : 2.2)
+      .attr('opacity', basin === 'Bering Sea' ? 1.0 : 0.38)
       .attr('d', d => lineGen(d.values))
       .on('mouseover', (event, d) => {
         focusRegionalChart(d.basin);
@@ -483,50 +495,16 @@ function renderRegionalChart(series) {
 // ── VIZ 3: DELTA MAP ──────────────────────────────────────────────────────────
 
 function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
-  const container = document.getElementById('viz-map');
-  const W = Math.min(container.parentElement.clientWidth || window.innerWidth * 0.9, 1180);
-  const H = Math.round(W * 0.90);
-
-  const projection = d3.geoAzimuthalEqualArea()
-    .rotate([180, -57])
-    .clipAngle(33)
-    .scale(W * 0.75)
-    .translate([W / 2, H / 2]);
-
-  const path = d3.geoPath().projection(projection);
-  const countries = topojson.feature(worldTopo, worldTopo.objects.countries);
-
-  const svg = d3.select('#viz-map').append('svg')
-    .attr('width', W)
-    .attr('height', H)
-    .style('display', 'block')
-    .style('margin', '0 auto')
-    .attr('class', 'viz-svg');
-
-  svg.append('rect')
-    .attr('width', W)
-    .attr('height', H)
-    .attr('fill', '#010a14');
-
-  svg.append('path')
-    .datum(d3.geoGraticule().step([30, 10])())
-    .attr('d', path)
-    .attr('fill', 'none')
-    .attr('stroke', '#0a2540')
-    .attr('stroke-width', 0.45)
-    .attr('opacity', 0.4);
-
   const sortedDeltas = deltaData.map(d => d.delta).sort((a, b) => a - b);
   const stretchedMin = d3.quantile(sortedDeltas, 0.03);
   const bandColorScale = d3.scaleSequential()
     .domain([0, stretchedMin])
-    .interpolator(t => d3.interpolateRdYlBu(1 - t))
+    .interpolator(t => d3.interpolateRdYlBu((1 - t) * 0.78))
     .clamp(true);
 
   const sliderEl = document.getElementById('map-year-slider');
   const yearReadout = d3.select('#map-year-readout');
 
-  // Per-cell per-year pH lookup
   const cellYearPH = new Map();
   rawData.forEach(d => {
     const key = `${d.lat},${d.lon}`;
@@ -534,159 +512,120 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
     cellYearPH.get(key).set(d.year, d.ph);
   });
 
-  // Project all ocean cells — projection clipAngle handles visible extent
-  const dotR = Math.max(4.5, Math.min(7.5, W / 145));
-  const cells = deltaData.map(d => {
-    const lon = d.lon > 180 ? d.lon - 360 : d.lon;
-    const proj = projection([lon, d.lat]);
-    return { ...d, px: proj?.[0], py: proj?.[1], basin: getBasin(d.lat), key: `${d.lat},${d.lon}` };
-  }).filter(d => d.px != null && !isNaN(d.px));
+  // ── Bering Sea: cold high-latitude focus ───────────────────────────────────
+  const beringEl = document.getElementById('viz-map-bering');
+  const W1 = beringEl.clientWidth || 500;
+  const H1 = Math.round(W1 * 0.72);
+  const beringProj = d3.geoMercator()
+    .center([-168, 58])
+    .scale(W1 * 1.55)
+    .translate([W1 / 2, H1 / 2]);
+  const bering = buildMapPanel('#viz-map-bering', W1, H1, beringProj, deltaData, cellYearPH, worldTopo);
 
-  // Draw one dot per grid cell
-  const dots = svg.append('g')
-    .selectAll('.delta-dot')
-    .data(cells)
-    .enter().append('circle')
-    .attr('class', 'delta-dot')
-    .attr('cx', d => d.px)
-    .attr('cy', d => d.py)
-    .attr('r', dotR)
-    .attr('fill', '#e2f0f7')
-    .attr('opacity', 0.82);
+  // ── Philippine Sea: tropical near-landmass focus ───────────────────────────
+  const philEl = document.getElementById('viz-map-phil');
+  const W2 = philEl.clientWidth || 500;
+  const H2 = Math.round(W2 * 0.80);
+  const philProj = d3.geoMercator()
+    .center([125, 12])
+    .scale(W2 * 2.2)
+    .translate([W2 / 2, H2 / 2]);
+  const phil = buildMapPanel('#viz-map-phil', W2, H2, philProj, deltaData, cellYearPH, worldTopo);
 
-  // Land mask on top
-  svg.append('path')
-    .datum(countries)
-    .attr('d', path)
-    .attr('fill', '#0f1a24')
-    .attr('stroke', '#1a3a52')
-    .attr('stroke-width', 0.45)
-    .attr('opacity', 0.96)
-    .style('pointer-events', 'none');
-
-  function updateDots(year) {
-    dots.attr('fill', d => {
-      const ph1850 = cellYearPH.get(d.key)?.get(1850);
-      const phYear = cellYearPH.get(d.key)?.get(year);
-      return (ph1850 != null && phYear != null) ? bandColorScale(phYear - ph1850) : '#334';
+  function updateBoth(year) {
+    [bering, phil].forEach(({ dots }) => {
+      dots.attr('fill', d => {
+        const ph1850 = cellYearPH.get(d.key)?.get(1850);
+        const phYear = cellYearPH.get(d.key)?.get(year);
+        return (ph1850 != null && phYear != null) ? bandColorScale(phYear - ph1850) : '#334';
+      });
     });
     yearReadout.text(year);
     const pct = ((year - 1850) / (2014 - 1850)) * 100;
     sliderEl.style.background = `linear-gradient(to right, var(--teal) ${pct}%, #0e2a3d ${pct}%)`;
   }
 
-  // Cross-link with Viz 2 regional chart hover
   updateMapRegionFocus = basin => {
-    dots
-      .attr('opacity', d => !basin || d.basin === basin ? 0.90 : 0.10)
-      .attr('r', d => basin && d.basin === basin ? dotR * 1.2 : dotR * 0.75);
+    [bering, phil].forEach(({ dots, dotR }) => {
+      dots
+        .attr('opacity', d => !basin || d.basin === basin ? 0.90 : 0.10)
+        .attr('r', d => basin && d.basin === basin ? dotR * 1.2 : dotR * 0.75);
+    });
   };
+
+  sliderEl.addEventListener('input', () => updateBoth(+sliderEl.value));
+  updateBoth(1850);
+
+  document.getElementById('section-map')._animate = () => {
+    [bering, phil].forEach(({ dots }) => {
+      dots.attr('opacity', 0)
+        .transition().duration(900)
+        .delay((_, i) => i * 2)
+        .attr('opacity', 0.82);
+    });
+  };
+
+  renderMapLegend(0, stretchedMin, bandColorScale);
+  renderMapNotes();
+}
+
+function buildMapPanel(selector, W, H, projection, deltaData, cellYearPH, worldTopo) {
+  const pathGen = d3.geoPath().projection(projection);
+  const countries = topojson.feature(worldTopo, worldTopo.objects.countries);
+  const dotR = Math.max(3.5, Math.min(6, W / 110));
+  const margin = dotR * 2;
+
+  const cells = deltaData.map(d => {
+    const lon = d.lon > 180 ? d.lon - 360 : d.lon;
+    const proj = projection([lon, d.lat]);
+    if (!proj) return null;
+    const [px, py] = proj;
+    if (px < -margin || px > W + margin || py < -margin || py > H + margin) return null;
+    return { ...d, px, py, basin: getBasin(d.lat), key: `${d.lat},${d.lon}`, normLon: lon };
+  }).filter(Boolean);
+
+  const svg = d3.select(selector).append('svg')
+    .attr('width', W).attr('height', H)
+    .style('display', 'block').style('margin', '0 auto')
+    .attr('class', 'viz-svg');
+
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0a2d4a');
+
+  svg.append('path')
+    .datum(d3.geoGraticule().step([10, 5])())
+    .attr('d', pathGen)
+    .attr('fill', 'none')
+    .attr('stroke', '#0a2540')
+    .attr('stroke-width', 0.5)
+    .attr('opacity', 0.5);
+
+  const dots = svg.append('g').selectAll('.delta-dot')
+    .data(cells).enter().append('circle')
+    .attr('class', 'delta-dot')
+    .attr('cx', d => d.px).attr('cy', d => d.py)
+    .attr('r', dotR).attr('fill', '#e2f0f7').attr('opacity', 0.82);
+
+  svg.append('path')
+    .datum(countries).attr('d', pathGen)
+    .attr('fill', '#0f1a24').attr('stroke', '#1a3a52')
+    .attr('stroke-width', 0.5).attr('opacity', 0.96)
+    .style('pointer-events', 'none');
 
   dots
     .on('mouseover', (event, d) => {
-      const year = +sliderEl.value;
+      const year = +document.getElementById('map-year-slider').value;
       const ph1850 = cellYearPH.get(d.key)?.get(1850);
       const phYear = cellYearPH.get(d.key)?.get(year);
       const delta = (ph1850 != null && phYear != null) ? phYear - ph1850 : null;
-      const dispLon = d.lon > 180 ? d.lon - 360 : d.lon;
       showTooltip(event,
-        `<strong>${d.basin}</strong><br>` +
-        `${d.lat}°, ${dispLon}°<br>` +
+        `<strong>${d.basin}</strong><br>${d.lat}°, ${d.normLon.toFixed(0)}°<br>` +
         `${year} pH: ${phYear?.toFixed(4) ?? '—'}<br>` +
         `<span style="color:#ff4d6d">Δ from 1850: ${delta?.toFixed(4) ?? '—'}</span>`);
     })
     .on('mousemove', moveTooltip)
     .on('mouseout', hideTooltip);
 
-  sliderEl.addEventListener('input', () => updateDots(+sliderEl.value));
-
-  updateDots(1850);
-
-  // ── Brush for custom region selection ──────────────────────────────────────
-  const brushPanel = document.createElement('div');
-  brushPanel.id = 'brush-chart-panel';
-  brushPanel.innerHTML = '<p class="brush-hint">Drag on the map above to plot a custom region\'s pH trend</p>';
-
-  let currentSelection = null;
-
-  const mapBrush = d3.brush()
-    .extent([[0, 0], [W, H]])
-    .on('brush', ({ selection }) => {
-      if (!selection) return;
-      currentSelection = selection;
-      const [[x0, y0], [x1, y1]] = selection;
-      dots
-        .attr('opacity', d => (d.px >= x0 && d.px <= x1 && d.py >= y0 && d.py <= y1) ? 1.0 : 0.12)
-        .attr('r',       d => (d.px >= x0 && d.px <= x1 && d.py >= y0 && d.py <= y1) ? dotR * 1.2 : dotR * 0.7);
-      hideTooltip();
-    })
-    .on('end', ({ selection }) => {
-      currentSelection = selection;
-      if (!selection) {
-        dots.attr('opacity', 0.82).attr('r', dotR);
-        brushPanel.innerHTML = '<p class="brush-hint">Drag on the map above to plot a custom region\'s pH trend</p>';
-        return;
-      }
-      const [[x0, y0], [x1, y1]] = selection;
-      const selected = cells.filter(d => d.px >= x0 && d.px <= x1 && d.py >= y0 && d.py <= y1);
-      if (!selected.length) return;
-
-      const years = d3.range(1850, 2015);
-      const trendData = years.map(year => {
-        const phs = selected.map(d => cellYearPH.get(d.key)?.get(year)).filter(v => v != null);
-        return phs.length ? { year, ph: d3.mean(phs) } : null;
-      }).filter(Boolean);
-
-      const basins = [...new Set(selected.map(d => d.basin))];
-      renderBrushChart(brushPanel, trendData, selected.length, basins);
-    });
-
-  const brushG = svg.append('g').attr('class', 'map-brush').call(mapBrush);
-
-  // Tooltip passthrough when no brush selection is active
-  brushG.select('.overlay')
-    .on('mousemove.tooltip', (event) => {
-      if (currentSelection) return;
-      const [mx, my] = d3.pointer(event);
-      const threshold = (dotR * 2.5) ** 2;
-      const nearest = cells.reduce((best, d) => {
-        const dist2 = (d.px - mx) ** 2 + (d.py - my) ** 2;
-        return dist2 < best.dist2 ? { d, dist2 } : best;
-      }, { d: null, dist2: Infinity });
-      if (nearest.d && nearest.dist2 < threshold) {
-        const year = +sliderEl.value;
-        const ph1850 = cellYearPH.get(nearest.d.key)?.get(1850);
-        const phYear = cellYearPH.get(nearest.d.key)?.get(year);
-        const delta = (ph1850 != null && phYear != null) ? phYear - ph1850 : null;
-        const dispLon = nearest.d.lon > 180 ? nearest.d.lon - 360 : nearest.d.lon;
-        showTooltip(event,
-          `<strong>${nearest.d.basin}</strong><br>` +
-          `${nearest.d.lat}°, ${dispLon}°<br>` +
-          `${year} pH: ${phYear?.toFixed(4) ?? '—'}<br>` +
-          `<span style="color:#ff4d6d">Δ from 1850: ${delta?.toFixed(4) ?? '—'}</span>`
-        );
-      } else {
-        hideTooltip();
-      }
-    })
-    .on('mouseleave.tooltip', hideTooltip);
-
-  document.getElementById('section-map')._animate = () => {
-    dots.attr('opacity', 0)
-      .transition().duration(900)
-      .delay((d, i) => i * 2)
-      .attr('opacity', 0.82);
-  };
-
-  d3.select('#viz-map')
-    .style('position', 'relative')
-    .style('height', H + 'px')
-    .style('max-width', W + 'px')
-    .style('margin', '0 auto');
-
-  renderMapLegend(0, stretchedMin, bandColorScale);
-  renderMapNotes();
-  document.getElementById('section-map').appendChild(brushPanel);
+  return { dots, dotR };
 }
 
 function renderMapNotes() {
@@ -694,16 +633,16 @@ function renderMapNotes() {
 
   const notes = [
     {
-      title: 'The Bering Sea stands out',
-      text: 'With the Bering Sea centered, the contrast is clear: the blue tropics in the lower half of the map have barely moved, while the reds cluster in the upper latitudes — the Bering Sea among the deepest.'
+      title: 'Bering Sea: sharp decline',
+      text: 'Cold, nutrient-rich water absorbs CO₂ rapidly. By 2014 the Bering Sea has reddened dramatically — among the most acidified ocean regions on Earth.'
     },
     {
-      title: 'Cold water, faster change',
-      text: 'The same physics that make the Bering Sea a world-class fishery — cold, nutrient-rich water — also make it absorb CO₂ faster, driving steeper acidification than warmer tropical seas.'
+      title: 'Philippine Sea: a gentler shift',
+      text: 'Warm tropical surface water holds less dissolved CO₂, buffering acidification. The pH drop near the Philippines is real but far smaller than at high latitudes.'
     },
     {
-      title: 'Drag the slider to compare over time',
-      text: 'Start at 1850 — all blue. Drag right to 2014 and watch the Bering Sea and Arctic redden while the tropics remain relatively stable.'
+      title: 'Drag the slider to compare',
+      text: 'Start at 1850 — all blue. Drag right to 2014 and watch the Bering Sea redden while the Philippine Sea stays relatively stable.'
     }
   ];
 
@@ -843,31 +782,31 @@ function renderMapLegend(lessChange, mostAcidified, colorScale) {
 
 // ── ACIDITY GUESS WIDGET ──────────────────────────────────────────────────────
 
-function renderAcidificationGuess(regionalSeries) {
-  const arcticSeries   = regionalSeries.find(s => s.basin === 'Arctic');
-  const tropicalSeries = regionalSeries.find(s => s.basin === 'Tropical');
+function renderAcidificationGuess(allSeries) {
+  const beringSeries   = allSeries.find(s => s.basin === 'Bering Sea');
+  const tropicalSeries = allSeries.find(s => s.basin === 'Tropical');
   const widget = document.getElementById('acidity-guess-widget');
-  if (!arcticSeries || !tropicalSeries || !widget) return;
+  if (!beringSeries || !tropicalSeries || !widget) return;
 
-  const arcticFirst = arcticSeries.values[0];
-  const arcticLast  = arcticSeries.values[arcticSeries.values.length - 1];
-  const arcticDrop  = arcticFirst.ph - arcticLast.ph;
+  const beringFirst = beringSeries.values[0];
+  const beringLast  = beringSeries.values[beringSeries.values.length - 1];
+  const beringDrop  = beringFirst.ph - beringLast.ph;
 
   const tropFirst = tropicalSeries.values[0];
   const tropLast  = tropicalSeries.values[tropicalSeries.values.length - 1];
   const tropDrop  = tropFirst.ph - tropLast.ph;
 
-  const arcticAcidPct = (Math.pow(10, arcticDrop) - 1) * 100;
+  const beringAcidPct = (Math.pow(10, beringDrop) - 1) * 100;
   const tropAcidPct   = (Math.pow(10, tropDrop)   - 1) * 100;
 
   widget.innerHTML = `
     <p class="guess-question">Since 1850, how much more acidic has each region become?</p>
-    <p class="guess-hint">Arctic dropped <strong class="guess-hl">${arcticDrop.toFixed(2)} pH units</strong> · Tropics dropped <strong class="guess-hl">${tropDrop.toFixed(2)} pH units</strong>. Enter your best guess for each.</p>
+    <p class="guess-hint">Bering Sea dropped <strong class="guess-hl">${beringDrop.toFixed(2)} pH units</strong> · Tropics dropped <strong class="guess-hl">${tropDrop.toFixed(2)} pH units</strong>. Enter your best guess for each.</p>
     <div class="guess-two-inputs">
       <div class="guess-field">
-        <label class="guess-field-label" style="color:var(--red)">Arctic</label>
+        <label class="guess-field-label" style="color:#ff6b00">Bering Sea</label>
         <div class="guess-field-input-row">
-          <input type="number" id="guess-arctic" min="0" max="999" step="1" placeholder="?">
+          <input type="number" id="guess-bering" min="0" max="999" step="1" placeholder="?">
           <span class="guess-pct-label">% more acidic</span>
         </div>
       </div>
@@ -883,36 +822,36 @@ function renderAcidificationGuess(regionalSeries) {
     <div id="guess-result" class="guess-result"></div>
   `;
 
-  const inputArctic = widget.querySelector('#guess-arctic');
+  const inputBering = widget.querySelector('#guess-bering');
   const inputTrop   = widget.querySelector('#guess-trop');
   const btn         = widget.querySelector('#guess-reveal-btn');
   const result      = widget.querySelector('#guess-result');
 
   btn.addEventListener('click', () => {
-    const guessArctic = parseFloat(inputArctic.value);
+    const guessBering = parseFloat(inputBering.value);
     const guessTrop   = parseFloat(inputTrop.value);
     let invalid = false;
-    if (isNaN(guessArctic) || guessArctic < 0) { inputArctic.classList.add('guess-input-error'); invalid = true; } else inputArctic.classList.remove('guess-input-error');
+    if (isNaN(guessBering) || guessBering < 0) { inputBering.classList.add('guess-input-error'); invalid = true; } else inputBering.classList.remove('guess-input-error');
     if (isNaN(guessTrop)   || guessTrop   < 0) { inputTrop.classList.add('guess-input-error');   invalid = true; } else inputTrop.classList.remove('guess-input-error');
     if (invalid) return;
 
     btn.disabled = true;
-    inputArctic.disabled = true;
+    inputBering.disabled = true;
     inputTrop.disabled = true;
     btn.textContent = 'Answer revealed';
 
-    const maxPct     = Math.max(arcticAcidPct, tropAcidPct);
-    const arcticBarW = Math.round((arcticAcidPct / maxPct) * 100);
+    const maxPct     = Math.max(beringAcidPct, tropAcidPct);
+    const beringBarW = Math.round((beringAcidPct / maxPct) * 100);
     const tropBarW   = Math.round((tropAcidPct   / maxPct) * 100);
 
     result.innerHTML = `
       <div class="guess-bars">
         <div class="guess-bar-row">
-          <span class="guess-bar-label" style="color:var(--red)">Arctic</span>
+          <span class="guess-bar-label" style="color:#ff6b00">Bering Sea</span>
           <div class="guess-bar-track">
-            <div class="guess-bar" style="width:${arcticBarW}%; background:var(--red)"></div>
+            <div class="guess-bar" style="width:${beringBarW}%; background:#ff6b00"></div>
           </div>
-          <span class="guess-bar-val"><span class="guess-hl-red">${arcticAcidPct.toFixed(0)}%</span> <span class="guess-your-val">(you: ${guessArctic.toFixed(0)}%)</span></span>
+          <span class="guess-bar-val"><span class="guess-hl-red">${beringAcidPct.toFixed(0)}%</span> <span class="guess-your-val">(you: ${guessBering.toFixed(0)}%)</span></span>
         </div>
         <div class="guess-bar-row">
           <span class="guess-bar-label" style="color:var(--teal)">Tropics</span>
@@ -922,7 +861,7 @@ function renderAcidificationGuess(regionalSeries) {
           <span class="guess-bar-val"><span class="guess-hl">${tropAcidPct.toFixed(0)}%</span> <span class="guess-your-val">(you: ${guessTrop.toFixed(0)}%)</span></span>
         </div>
       </div>
-      <p class="guess-explain">A pH drop of ${arcticDrop.toFixed(2)} means H⁺ concentration multiplied by 10<sup>${arcticDrop.toFixed(2)}</sup> = ${Math.pow(10, arcticDrop).toFixed(2)}×, a ${arcticAcidPct.toFixed(0)}% increase. The tropical ${tropDrop.toFixed(2)} drop gives 10<sup>${tropDrop.toFixed(2)}</sup> = ${Math.pow(10, tropDrop).toFixed(2)}×, or ${tropAcidPct.toFixed(0)}%. Because pH is a base-10 log scale, the actual acidity jump is always much larger than the pH number suggests.</p>
+      <p class="guess-explain">A pH drop of ${beringDrop.toFixed(2)} means H⁺ concentration multiplied by 10<sup>${beringDrop.toFixed(2)}</sup> = ${Math.pow(10, beringDrop).toFixed(2)}×, a ${beringAcidPct.toFixed(0)}% increase. The tropical ${tropDrop.toFixed(2)} drop gives 10<sup>${tropDrop.toFixed(2)}</sup> = ${Math.pow(10, tropDrop).toFixed(2)}×, or ${tropAcidPct.toFixed(0)}%. Because pH is a base-10 log scale, the actual acidity jump is always much larger than the pH number suggests.</p>
     `;
     result.classList.add('guess-result-visible');
   });

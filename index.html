@@ -16,7 +16,7 @@
     <canvas id="hero-canvas"></canvas>
     <div class="hero-content">
       <p class="eyebrow">A DATA STORY — 1850 TO 2014</p>
-      <h1>The Ocean Is Changing.<br>Not Everywhere Equally.</h1>
+      <h1>The Ocean Is Changing.<br></h1>
       <p class="hero-sub">Since industrialization, the world's oceans have absorbed 25–30% of all human CO₂ emissions — and the chemical consequences are written unevenly across every latitude.</p>
       <div class="scroll-cue">
         <span>Scroll to explore</span>
@@ -62,10 +62,19 @@
     <div class="map-header">
       <span class="section-num">03</span>
       <h2>Where Change Is Concentrated</h2>
-      <p class="map-sub">pH change from the 1850 baseline, centered on the Bering Sea. Darker red = more acidified. Drag the slider or brush a region to plot its trend.</p>
+      <p class="map-sub">pH change from the 1850 baseline. Darker red = more acidified. Drag the slider to compare across time.</p>
     </div>
     <div id="viz-map-container">
-      <div id="viz-map"></div>
+      <div id="viz-maps-row">
+        <div class="viz-map-panel">
+          <div class="viz-map-panel-label">Bering Sea</div>
+          <div id="viz-map-bering"></div>
+        </div>
+        <div class="viz-map-panel">
+          <div class="viz-map-panel-label">Philippine Sea</div>
+          <div id="viz-map-phil"></div>
+        </div>
+      </div>
     </div>
     <div id="map-year-control">
       <input type="range" id="map-year-slider" min="1850" max="2014" step="1" value="1850">

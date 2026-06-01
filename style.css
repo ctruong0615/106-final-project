@@ -231,13 +231,29 @@ body {
 }
 
 #viz-map-container {
-  position: relative;
   width: 100%;
 }
 
-#viz-map {
-  position: relative;
+#viz-maps-row {
+  display: flex;
+  gap: 1.5rem;
   width: 100%;
+  align-items: flex-start;
+}
+
+.viz-map-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.viz-map-panel-label {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
 }
 
 #map-legend {
