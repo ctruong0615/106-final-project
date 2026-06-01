@@ -865,3 +865,7 @@ body {
   padding-top: 0.75rem;
 }
 
+/* Section 06 is intentionally hidden/retired. Safe fallback in case the old HTML block remains. */
+#section-conclusion {
+  display: none;
+}

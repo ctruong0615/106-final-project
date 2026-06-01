@@ -548,8 +548,8 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
   updateMapRegionFocus = basin => {
     [bering, phil].forEach(({ dots, dotR }) => {
       dots
-        .attr('opacity', d => !basin || d.basin === basin ? 0.90 : 0.10)
-        .attr('r', d => basin && d.basin === basin ? dotR * 1.2 : dotR * 0.75);
+        .attr('opacity', d => !basin || d.basin === basin ? 0.90 : 0.12)
+        .attr('r', d => !basin ? dotR : (d.basin === basin ? dotR * 1.25 : dotR * 0.85));
     });
   };
 
@@ -561,7 +561,7 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
       dots.attr('opacity', 0)
         .transition().duration(900)
         .delay((_, i) => i * 2)
-        .attr('opacity', 0.82);
+        .attr('opacity', 0.88);
     });
   };
 
@@ -572,7 +572,7 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
 function buildMapPanel(selector, W, H, projection, deltaData, cellYearPH, worldTopo) {
   const pathGen = d3.geoPath().projection(projection);
   const countries = topojson.feature(worldTopo, worldTopo.objects.countries);
-  const dotR = Math.max(3.5, Math.min(6, W / 110));
+  const dotR = Math.max(5.5, Math.min(8.5, W / 85));
   const margin = dotR * 2;
 
   const cells = deltaData.map(d => {
@@ -603,7 +603,11 @@ function buildMapPanel(selector, W, H, projection, deltaData, cellYearPH, worldT
     .data(cells).enter().append('circle')
     .attr('class', 'delta-dot')
     .attr('cx', d => d.px).attr('cy', d => d.py)
-    .attr('r', dotR).attr('fill', '#e2f0f7').attr('opacity', 0.82);
+    .attr('r', dotR)
+    .attr('fill', '#e2f0f7')
+    .attr('stroke', '#020d1a')
+    .attr('stroke-width', 1.25)
+    .attr('opacity', 0.88);
 
   svg.append('path')
     .datum(countries).attr('d', pathGen)
