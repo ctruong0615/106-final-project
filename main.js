@@ -1106,7 +1106,7 @@ function renderEcologicalDomino() {
 
     const textTarget = document.getElementById('domino-stage-desc');
     const descriptions = {
-      0: `Select a structural stage above to carefully track how ocean acidificatino systematically dismantles apex biological life for Inuit communities.`,
+      0: `Select a structural stage above to carefully track how ocean acidification systematically dismantles apex biological life for Inuit communities.`,
       1: `<strong>Corrosive Thresholds Breached:</strong> High latitude cold waters absorb carbon at accelerated rates. As pH levels drop, structural calcifiers see shell composition dissolve, which instantly crushes the foundation of the food chain.`,
       2: `<strong>Starvation Cascades Upward:</strong> Without bivalves, bottom-feeding walruses run out of food sources. Additionally, missing pteropod can instantly erase up to 60% of primary food resources for migrating salmon and Pacific cod.`,
       3: `<strong>Apex Disruption:</strong> Without stable salmon and marine consumer patterns, apex predators like the Polar Bear lose reliable fat reserves, causing severe structural shifts in geographic migration patterns.`,
