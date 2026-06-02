@@ -91,6 +91,15 @@ body {
   padding: 2rem;
 }
 
+.team-names {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.05rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2rem; /* Adds space between names and your title */
+}
+
 .eyebrow {
   font-size: 0.72rem;
   font-weight: 600;
