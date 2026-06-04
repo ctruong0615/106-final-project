@@ -200,20 +200,6 @@
 </style>
 
   </section>
-
-
-  <!-- WRITEUP SECTION -->
-  <section id="section-writeup" class="scroll-reveal">
-    <div class="writeup-inner">
-      <h2 class="writeup-header">Project Writeup</h2>
-      <h3 class="writeup-q">1. What have you done so far?</h3>
-      <p class="writeup-a">Firstly, we obtained ocean pH from the IPSL-CM6A-LR climate model and aggregated the monthly timescales into annual averages. Additionally, we binned regions into 5-degree latitude/longitude sections and took only the surface pH data. After obtaining this information, we created a D3.js line graph depicting the trend of decreasing ocean pH between 1980 and 2014. Also, we made an interactive toggle that computes and colors the acidification deficit instantly. Finally, we made a static line chart and a static global map to show how different regions have changed since 1850.</p>
-      <h3 class="writeup-q">2. What will be the most challenging part of your project to design and why?</h3>
-      <p class="writeup-a">The most difficult part of the assignment will be developing multiple, simultaneously interacting views that correlate the pH values with the actual population numbers of certain marine species. Creating such views entails maintaining the complex state in D3.js where changing any one view instantaneously changes another related visualization without any lagging or freezing. In addition, the biological measurements and their connection with physical pH readings can lead to visual noise in the plot, and we should be careful about the implementation of this functionality. Maintaining a balance between technical constraints and expressiveness criteria is going to be extremely challenging for us.</p>
-    </div>
-  </section>
-
-
   <div id="tooltip"></div>
 
   <script src="main.js"></script>
