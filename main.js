@@ -191,17 +191,10 @@ function renderGlobalTrend(data) {
     .text(`1850 baseline (${baseline1850.toFixed(3)})`);
 
   // Deficit shading
-  const deficitShading = svg.append('path').datum(data)
+  svg.append('path').datum(data)
     .attr('fill', '#ff4d6d').attr('opacity', 0.1)
     .attr('d', d3.area().x(d => x(d.year)).y0(y(baseline1850)).y1(d => y(d.ph)).curve(d3.curveCatmullRom));
 
-  const toggleBtn = document.getElementById('btn-toggle-shading');
-  let shadingVisible = true;
-  toggleBtn.addEventListener('click', () => {
-    shadingVisible = !shadingVisible;
-    deficitShading.attr('opacity', shadingVisible ? 0.1 : 0);
-    toggleBtn.textContent = shadingVisible ? 'Hide Acidification Deficit' : 'Show Acidification Deficit';
-  });
 
   // Main line — animated
   const linePath = svg.append('path').datum(data)
@@ -515,11 +508,11 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
   // ── Bering Sea: cold high-latitude focus ───────────────────────────────────
   const beringEl = document.getElementById('viz-map-bering');
   const W1 = beringEl.clientWidth || 500;
-  const H1 = Math.round(W1 * 0.72);
+  const H1 = Math.round(W1 * 0.80);
   const beringProj = d3.geoMercator()
     .center([-168, 58])
     .scale(W1 * 1.55)
-    .translate([W1 / 2, H1 / 2]);
+    .translate([W1 / 2, Math.round(W1 * 0.36)]);
   const bering = buildMapPanel('#viz-map-bering', W1, H1, beringProj, deltaData, cellYearPH, worldTopo);
 
   // ── Philippine Sea: tropical near-landmass focus ───────────────────────────
