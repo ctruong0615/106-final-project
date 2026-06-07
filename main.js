@@ -277,7 +277,8 @@ function renderBeringChart(rawData, globalByYear) {
     .attr('stroke-dasharray', '5,4').attr('opacity', 0.4)
     .attr('d', d3.line().x(d => x(d.year)).y(d => y(d.ph)).curve(d3.curveCatmullRom));
   svg.append('text')
-    .attr('x', 6).attr('y', y(globalByYear[0].ph) - 7)
+    .attr('x', 6)
+    .attr('y', y(globalByYear[0].ph) + 14)
     .attr('fill', '#7fb3c8').style('font-size', '10px').attr('opacity', 0.6)
     .text('Global mean');
 
@@ -298,8 +299,10 @@ function renderBeringChart(rawData, globalByYear) {
       .attr('stroke', '#ff4d6d').attr('stroke-width', 1)
       .attr('stroke-dasharray', '3,3').attr('opacity', 0.45);
     svg.append('text')
-      .attr('x', cx).attr('y', y(ph) - 8)
-      .attr('text-anchor', 'middle').attr('fill', '#ff4d6d').style('font-size', '9px')
+      .attr('x', year === 2014 ? cx - 30 : year === 1984 ? cx + 2 : cx - 20)
+      .attr('y', year === 1984 ? Math.max(12, y(ph) - 10) : Math.max(12, y(ph) - 8))
+      .attr('text-anchor', year === 2014 ? 'end' : 'start')
+      .attr('fill', '#ff4d6d').style('font-size', '9px')
       .text(label);
   });
 
@@ -548,6 +551,37 @@ function renderDeltaMap(deltaData, worldTopo, regionalMap, rawData) {
 
   sliderEl.addEventListener('input', () => updateBoth(+sliderEl.value));
   updateBoth(1850);
+
+  // Add play button
+const playBtn = d3.select('#map-year-control')
+  .insert('button', 'input')
+  .attr('id', 'map-play-btn')
+  .style('margin-right', '10px')
+  .style('background', '#0a2540')
+  .style('color', '#00b4d8')
+  .style('border', '1px solid #00b4d8')
+  .style('border-radius', '4px')
+  .style('padding', '4px 10px')
+  .style('cursor', 'pointer')
+  .text('▶ Play');
+
+let playInterval = null;
+playBtn.on('click', () => {
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    playBtn.text('▶ Play');
+  } else {
+    if (+sliderEl.value >= 2014) sliderEl.value = 1850;
+    playBtn.text('⏸ Pause');
+    playInterval = setInterval(() => {
+      const v = +sliderEl.value + 1;
+      if (v > 2014) { clearInterval(playInterval); playInterval = null; playBtn.text('▶ Play'); return; }
+      sliderEl.value = v;
+      updateBoth(v);
+    }, 40);
+  }
+});
 
   document.getElementById('section-map')._animate = () => {
     [bering, phil].forEach(({ dots }) => {
