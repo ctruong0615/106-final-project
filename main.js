@@ -331,7 +331,7 @@ function renderRegionalChart(series) {
   const W  = el.clientWidth || 560;
   const m  = { top: 24, right: 150, bottom: 44, left: 58 };
   const iW = W - m.left - m.right;
-  const iH = 340 - m.top - m.bottom;
+  const iH = 440 - m.top - m.bottom;
 
   const svg = d3.select('#viz-regional').append('svg')
     .attr('width', W).attr('height', iH + m.top + m.bottom)
